@@ -24,7 +24,7 @@
         owner  = "kepano";
         repo   = "obsidian-skills";
         rev    = "bb9ec95e1b59c3471bd6fd77a78a4042430bfac3";
-        hash   = "sha256-eYxbQ5OuOu0xltfM1Att/wOOPpPBVG8njP9lwtUvu5w=";
+        hash   = "sha256-nLsv1cJl/4wnb1TBkz6OA/9tC9TM15Yx7Tquk0NbjHk=";
       };
       subpath   = "obsidian";
       hasSkills = true;
