@@ -1,6 +1,7 @@
 { pkgs }:
 {
   claude-code = {
+    # upstream: github.com/obra/superpowers — "claude-plugins-official" is the marketplace vendor name
     "superpowers@claude-plugins-official" = {
       marketplace = "claude-plugins-official";
       plugin      = "superpowers";
