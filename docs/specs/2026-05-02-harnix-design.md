@@ -47,7 +47,7 @@ harnix/
 
 ```nix
 # flake.nix (consumer)
-inputs.harnix.url = "github:tiene9/harnix";
+inputs.harnix.url = "github:tienedev/harnix";
 
 # hosts/titi-gaming/home.nix
 { inputs, ... }: {

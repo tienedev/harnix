@@ -1,0 +1,1 @@
+{ pkgs, homeManagerConfiguration, harnixModule }: {}
