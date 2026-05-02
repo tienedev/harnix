@@ -20,9 +20,7 @@ let
       in e // { drv = harnixLib.mkPluginDrv { inherit (e) src subpath; name = "${e.marketplace}-${e.plugin}"; }; }
     );
 
-  claudeJson = builtins.toJSON {
-    mcpServers = lib.mapAttrs harnixLib.mkClaudeCodeMcpEntry cfg.mcpServers;
-  };
+  mcpServersRendered = lib.mapAttrs harnixLib.mkClaudeCodeMcpEntry cfg.mcpServers;
 
   mkEntry = scope: id: extraAttrs:
     let p = resolvedPlugins.${id};
@@ -64,14 +62,27 @@ let
 
   hasPlugins = cfg.plugins.claude-code.user != []
             || cfg.plugins.claude-code.project != {};
+  mcpServersJson = lib.escapeShellArg (builtins.toJSON mcpServersRendered);
 in
 {
   home.file = lib.mkMerge [
-    { ".claude.json".text = claudeJson; }
-
     (lib.mkIf hasPlugins (
       { ".claude/plugins/installed_plugins.json".text = installedPluginsJson; }
       // pluginDirEntries
     ))
   ];
+
+  # Merge mcpServers into ~/.claude.json without overwriting auth tokens or other keys.
+  # Claude Code manages this file itself; we only own the mcpServers key.
+  home.activation.claudeJsonMcpServers = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+    CLAUDE_JSON="$HOME/.claude.json"
+    MCP_SERVERS=${mcpServersJson}
+
+    if [ ! -f "$CLAUDE_JSON" ]; then
+      echo "{}" > "$CLAUDE_JSON"
+    fi
+
+    tmp=$(${pkgs.jq}/bin/jq --argjson mcp "$MCP_SERVERS" '.mcpServers = $mcp' "$CLAUDE_JSON")
+    echo "$tmp" > "$CLAUDE_JSON"
+  '';
 }
