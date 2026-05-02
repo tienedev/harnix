@@ -47,4 +47,9 @@ in
     ls ${basicConfig.config.home.file.".claude/plugins/cache/claude-plugins-official/superpowers/5.0.7".source}
     touch $out
   '';
+
+  skills-dir-created-for-plugin-with-skills = pkgs.runCommand "skills-dir-test" {} ''
+    ls ${basicConfig.config.home.file.".agents/skills/superpowers".source}
+    touch $out
+  '';
 }
