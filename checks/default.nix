@@ -1,6 +1,7 @@
 { pkgs, homeManagerConfiguration, harnixModule }:
 let
   lib = pkgs.lib;
+  harnixLib = import ../lib.nix { inherit lib pkgs; };
   basicConfig = homeManagerConfiguration {
     inherit pkgs;
     modules = [
@@ -13,9 +14,9 @@ let
     ];
   };
 
-  piMcp    = builtins.fromJSON basicConfig.config.home.file.".pi/agent/mcp.json".text;
-  claudeJ  = builtins.fromJSON basicConfig.config.home.file.".claude.json".text;
-  pluginsJ = builtins.fromJSON basicConfig.config.home.file.".claude/plugins/installed_plugins.json".text;
+  piMcp             = builtins.fromJSON basicConfig.config.home.file.".pi/agent/mcp.json".text;
+  claudeMcpRendered = lib.mapAttrs harnixLib.mkClaudeCodeMcpEntry basicConfig.config.ai.mcpServers;
+  pluginsJ          = builtins.fromJSON basicConfig.config.home.file.".claude/plugins/installed_plugins.json".text;
 in
 {
   pi-mcp-generates-correctly = pkgs.runCommand "pi-mcp-test" {} ''
@@ -28,9 +29,9 @@ in
 
   claude-json-generates-correctly = pkgs.runCommand "claude-json-test" {} ''
     ${pkgs.jq}/bin/jq -e '
-      .mcpServers["titi-browser"].type == "sse" and
-      .mcpServers["titi-browser"].url == "http://titi-browser:9223/sse"
-    ' ${pkgs.writeText "claude.json" (builtins.toJSON claudeJ)} > /dev/null
+      .["titi-browser"].type == "sse" and
+      .["titi-browser"].url == "http://titi-browser:9223/sse"
+    ' ${pkgs.writeText "claude-mcp.json" (builtins.toJSON claudeMcpRendered)} > /dev/null
     touch $out
   '';
 
