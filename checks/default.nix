@@ -10,6 +10,20 @@ let
         home = { username = "test"; homeDirectory = "/home/test"; stateVersion = "24.05"; };
         ai.mcpServers.titi-browser = { type = "sse"; url = "http://titi-browser:9223/sse"; };
         ai.plugins.claude-code.user = [ "superpowers@claude-plugins-official" ];
+        ai.agents.test-agent = {
+          description = "Fixture agent for harnix checks.";
+          body        = ./test-agent-body.md;
+          pi = {
+            thinking   = "low";
+            maxTurns   = 30;
+            tools      = [ "bash" "read" ];
+            extensions = false;
+          };
+          claudeCode = {
+            model = "sonnet";
+            tools = [ "Bash" "Read" ];
+          };
+        };
       }
     ];
   };
@@ -51,6 +65,32 @@ in
 
   skills-dir-created-for-plugin-with-skills = pkgs.runCommand "skills-dir-test" {} ''
     ls ${basicConfig.config.home.file.".agents/skills/superpowers".source}
+    touch $out
+  '';
+
+  pi-agent-generates-correctly = pkgs.runCommand "pi-agent-test" {} ''
+    AGENT=${basicConfig.config.home.file.".pi/agent/agents/test-agent.md".source}
+    ${pkgs.gnugrep}/bin/grep -qx 'description: Fixture agent for harnix checks.' "$AGENT"
+    ${pkgs.gnugrep}/bin/grep -qx 'thinking: low'       "$AGENT"
+    ${pkgs.gnugrep}/bin/grep -qx 'max_turns: 30'       "$AGENT"
+    ${pkgs.gnugrep}/bin/grep -qx 'tools: bash, read'   "$AGENT"
+    ${pkgs.gnugrep}/bin/grep -qx 'extensions: false'   "$AGENT"
+    ${pkgs.gnugrep}/bin/grep -q  'You are the test agent.' "$AGENT"
+    # Pi frontmatter must NOT carry a 'name:' field (that's CC-only).
+    if ${pkgs.gnugrep}/bin/grep -q '^name:' "$AGENT"; then
+      echo "Pi agent should not have a 'name:' frontmatter key" >&2
+      exit 1
+    fi
+    touch $out
+  '';
+
+  claude-code-agent-generates-correctly = pkgs.runCommand "cc-agent-test" {} ''
+    AGENT=${basicConfig.config.home.file.".claude/agents/test-agent.md".source}
+    ${pkgs.gnugrep}/bin/grep -qx 'name: test-agent' "$AGENT"
+    ${pkgs.gnugrep}/bin/grep -qx 'description: Fixture agent for harnix checks.' "$AGENT"
+    ${pkgs.gnugrep}/bin/grep -qx 'tools: Bash, Read' "$AGENT"
+    ${pkgs.gnugrep}/bin/grep -qx 'model: sonnet'     "$AGENT"
+    ${pkgs.gnugrep}/bin/grep -q  'You are the test agent.' "$AGENT"
     touch $out
   '';
 }
