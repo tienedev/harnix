@@ -70,9 +70,35 @@ ai.agents.flake-updater = {
 
 Per-tool `enable = false` skips rendering for that tool. Per-tool `body = ./other.md` overrides the shared body when one tool needs a different prompt. Default values omit the corresponding frontmatter key (e.g. `pi.tools = "all"` and `pi.extensions = true` mean "no restriction" and emit nothing).
 
+## Claude Code settings (`ai.claudeCode.settings`)
+
+Render `~/.claude/settings.json` declaratively. The defaults are deny-on-credentials and ask-on-mutation — opt in by setting `enable = true`:
+
+```nix
+ai.claudeCode.settings = {
+  enable = true;
+  extra = {
+    theme = "dark";
+    statusLine = { type = "command"; command = "bash ~/.claude/statusline-command.sh"; };
+    env.CLAUDE_CODE_MAX_OUTPUT_TOKENS = "80000";
+  };
+
+  # Add a PreToolUse hook (drop a writeShellApplication path here)
+  hooks.PreToolUse = [
+    { matcher = "Bash"; hooks = [{ type = "command"; command = "${myValidator}/bin/my-validator"; }]; }
+  ];
+};
+```
+
+`enabledPlugins` is derived from `ai.plugins.claude-code.user`. `mcpJsonScope.enableAllProjectMcpServers` defaults to `false` (CVE-2026-21852 mitigation); use `enabledMcpjsonServers` to allowlist specific server names from project `.mcp.json` files.
+
+The default `permissions` block bans reads of `~/.ssh`, `~/.aws`, `~/.gnupg`, `/run/secrets`, asks for `Bash`/`Write`/`Edit`/`mcp__*`, and allows the read-only tools (`Read`, `Glob`, `Grep`, `WebFetch`, `WebSearch`, `Task`, `Skill`). Override the whole `permissions` attrset if you need a different policy — there is no shallow merge.
+
+> First switch tip: if `~/.claude/settings.json` exists as a regular file from a previous manual edit, home-manager will refuse to symlink over it. Move it aside (`mv ~/.claude/settings.json ~/.claude/settings.json.preharnix`) before the first activation, or set `home-manager.backupFileExtension`.
+
 ## ⚠️ Runtime state
 
-`~/.claude.json` and `~/.pi/agent/mcp.json` are **fully owned by harnix**. Any changes made via CLI (`claude mcp add`, etc.) are overwritten on the next rebuild. To persist a change, declare it in your Nix config.
+`~/.claude.json`, `~/.pi/agent/mcp.json`, and (when enabled) `~/.claude/settings.json` are **fully owned by harnix**. Any changes made via CLI (`claude mcp add`, etc.) are overwritten on the next rebuild. To persist a change, declare it in your Nix config.
 
 ## Registry
 
