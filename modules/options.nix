@@ -122,6 +122,115 @@ let
       };
     };
   };
+
+  mcpJsonScopeModule = lib.types.submodule {
+    options = {
+      enableAllProjectMcpServers = lib.mkOption {
+        type = lib.types.bool;
+        default = false;
+        description = ''
+          When true, every .mcp.json file found in a project root is auto-trusted
+          and its declared MCP servers spawn without prompt. This is the supply-chain
+          vector documented as CVE-2026-21852: cloning a hostile repository into a
+          managed workspace yields immediate code execution. Keep false unless you
+          fully control every repo you open.
+        '';
+      };
+      enabledMcpjsonServers = lib.mkOption {
+        type = lib.types.listOf lib.types.str;
+        default = [];
+        description = "Allowlist of MCP server names from project .mcp.json that may load.";
+      };
+      disabledMcpjsonServers = lib.mkOption {
+        type = lib.types.listOf lib.types.str;
+        default = [];
+        description = "Denylist of MCP server names from project .mcp.json that must never load.";
+      };
+    };
+  };
+
+  claudeCodeSettingsModule = lib.types.submodule {
+    options = {
+      enable = lib.mkEnableOption ''
+        Render ~/.claude/settings.json declaratively. The file becomes a symlink
+        into the Nix store and any manual edit is overwritten on the next switch.
+      '';
+
+      permissions = lib.mkOption {
+        type = lib.types.attrsOf lib.types.anything;
+        default = {
+          defaultMode = "default";
+          allow = [
+            "Read" "Glob" "Grep"
+            "WebFetch" "WebSearch"
+            "Task" "Skill" "ExitPlanMode"
+            "NotebookRead"
+          ];
+          ask = [
+            "Bash"
+            "Write" "Edit" "MultiEdit" "NotebookEdit"
+            "mcp__*"
+          ];
+          deny = [
+            "Read(~/.ssh/**)" "Read(~/.aws/**)" "Read(~/.gnupg/**)"
+            "Read(~/.config/sops/**)"
+            "Read(/run/secrets/**)"
+            "Read(./**/.env)" "Read(./**/.env.*)"
+            "Write(/etc/**)"  "Edit(/etc/**)"
+            "Write(~/.ssh/**)" "Edit(~/.ssh/**)"
+            "Write(~/.aws/**)" "Edit(~/.aws/**)"
+            "Write(~/.gnupg/**)" "Edit(~/.gnupg/**)"
+            "Bash(curl * | sh*)"  "Bash(curl * | bash*)"
+            "Bash(wget * | sh*)"  "Bash(wget * | bash*)"
+            "Bash(sudo rm -rf:*)" "Bash(rm -rf /:*)" "Bash(rm -rf ~:*)"
+            "Bash(dd if=*of=/dev/*)" "Bash(mkfs:*)"
+          ];
+        };
+        description = ''
+          Top-level Claude Code permissions object. Defaults are deny-on-credentials,
+          ask-on-mutation. Override the whole attrset (no shallow merge): if you
+          customise this option you take responsibility for the deny list too.
+        '';
+      };
+
+      mcpJsonScope = lib.mkOption {
+        type = mcpJsonScopeModule;
+        default = {};
+        description = "Trust scope for .mcp.json files found inside project directories.";
+      };
+
+      hooks = lib.mkOption {
+        type = lib.types.attrsOf lib.types.anything;
+        default = {};
+        description = ''
+          Claude Code hooks (PreToolUse, PostToolUse, etc.). Free-form attrset
+          rendered verbatim into settings.json. Hooks run with full user privileges;
+          point only to derivations from your own Nix store.
+        '';
+      };
+
+      enabledPlugins = lib.mkOption {
+        type = lib.types.attrsOf lib.types.bool;
+        default = {};
+        description = ''
+          Override which plugins are enabled. By default this is derived from
+          ai.plugins.claude-code.user (every user-scope plugin is enabled).
+          Set explicitly to disable a plugin without removing its installation.
+        '';
+      };
+
+      extra = lib.mkOption {
+        type = lib.types.attrsOf lib.types.anything;
+        default = {};
+        description = ''
+          Free-form attributes merged at the top level of settings.json. Use this
+          for fields harnix does not model directly (theme, statusLine, env, etc.).
+          Unknown to Claude Code's schema = silently ignored, so verify upstream
+          documentation.
+        '';
+      };
+    };
+  };
 in
 {
   options.ai = {
@@ -157,6 +266,12 @@ in
       type        = lib.types.attrsOf agentModule;
       default     = {};
       description = "User-level subagent definitions, rendered into ~/.pi/agent/agents/<name>.md and ~/.claude/agents/<name>.md.";
+    };
+
+    claudeCode.settings = lib.mkOption {
+      type        = claudeCodeSettingsModule;
+      default     = {};
+      description = "Declarative ~/.claude/settings.json (permissions, hooks, MCP scope, plugins toggle).";
     };
   };
 }
