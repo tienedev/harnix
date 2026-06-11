@@ -44,6 +44,18 @@ let
     ];
   };
 
+  mutableSettingsConfig = homeManagerConfiguration {
+    inherit pkgs;
+    modules = [
+      harnixModule
+      {
+        home = { username = "test"; homeDirectory = "/home/test"; stateVersion = "24.05"; };
+        ai.claudeCode.settings.enable = true;
+        ai.claudeCode.settings.mutable = true;
+      }
+    ];
+  };
+
   piMcp             = builtins.fromJSON basicConfig.config.home.file.".pi/agent/mcp.json".text;
   claudeMcpRendered = lib.mapAttrs harnixLib.mkClaudeCodeMcpEntry basicConfig.config.ai.mcpServers;
   pluginsJ          = builtins.fromJSON basicConfig.config.home.file.".claude/plugins/installed_plugins.json".text;
@@ -141,4 +153,21 @@ in
     ' ${pkgs.writeText "settings.json" (builtins.toJSON settingsJson)} > /dev/null
     touch $out
   '';
+
+  settings-json-mutable-installs-writable-copy =
+    let
+      file   = mutableSettingsConfig.config.home.file.".claude/settings.json";
+      script = mutableSettingsConfig.config.home.activation.claudeCodeSettings.data;
+    in
+    assert !file.enable;
+    assert lib.hasInfix "install -m600" (builtins.unsafeDiscardStringContext script);
+    assert lib.hasInfix
+      (builtins.unsafeDiscardStringContext (toString file.source))
+      (builtins.unsafeDiscardStringContext script);
+    pkgs.runCommand "settings-mutable-test" {} "touch $out";
+
+  settings-json-immutable-by-default =
+    assert settingsConfig.config.home.file.".claude/settings.json".enable;
+    assert !(settingsConfig.config.home.activation ? claudeCodeSettings);
+    pkgs.runCommand "settings-immutable-default-test" {} "touch $out";
 }

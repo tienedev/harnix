@@ -20,7 +20,20 @@ let
   rendered = base // cfg.extra;
 in
 lib.mkIf cfg.enable {
-  home.file.".claude/settings.json".text = builtins.toJSON rendered;
+  home.file.".claude/settings.json" = {
+    text = builtins.toJSON rendered;
+    enable = !cfg.mutable;
+  };
+
+  # Mutable mode: same rendered content, installed as a regular writable file
+  # after linkGeneration (so the cleanup of the previous generation's symlink
+  # cannot race with the install). Claude Code can then write the file at
+  # runtime; the declared content is reapplied on every activation.
+  home.activation.claudeCodeSettings = lib.mkIf cfg.mutable (
+    lib.hm.dag.entryAfter [ "linkGeneration" ] ''
+      run install -m600 ${config.home.file.".claude/settings.json".source} "$HOME/.claude/settings.json"
+    ''
+  );
 
   warnings = lib.optional cfg.mcpJsonScope.enableAllProjectMcpServers ''
     ai.claudeCode.settings.mcpJsonScope.enableAllProjectMcpServers is true.

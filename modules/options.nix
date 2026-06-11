@@ -152,9 +152,22 @@ let
   claudeCodeSettingsModule = lib.types.submodule {
     options = {
       enable = lib.mkEnableOption ''
-        Render ~/.claude/settings.json declaratively. The file becomes a symlink
-        into the Nix store and any manual edit is overwritten on the next switch.
+        Render ~/.claude/settings.json declaratively. By default the file becomes
+        a symlink into the Nix store and any manual edit is overwritten on the
+        next switch; see `mutable` to keep it writable at runtime.
       '';
+
+      mutable = lib.mkOption {
+        type = lib.types.bool;
+        default = false;
+        description = ''
+          Install ~/.claude/settings.json as a writable copy instead of a
+          read-only store symlink. Claude Code commands that write the file at
+          runtime (/effort, /config, plugin toggles) work between switches;
+          each home-manager activation reinstalls the declared content, so
+          runtime edits are reset on rebuild — persist them in Nix instead.
+        '';
+      };
 
       permissions = lib.mkOption {
         type = lib.types.attrsOf lib.types.anything;

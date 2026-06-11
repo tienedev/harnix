@@ -94,11 +94,13 @@ ai.claudeCode.settings = {
 
 The default `permissions` block bans reads of `~/.ssh`, `~/.aws`, `~/.gnupg`, `/run/secrets`, asks for `Bash`/`Write`/`Edit`/`mcp__*`, and allows the read-only tools (`Read`, `Glob`, `Grep`, `WebFetch`, `WebSearch`, `Task`, `Skill`). Override the whole `permissions` attrset if you need a different policy — there is no shallow merge.
 
-> First switch tip: if `~/.claude/settings.json` exists as a regular file from a previous manual edit, home-manager will refuse to symlink over it. Move it aside (`mv ~/.claude/settings.json ~/.claude/settings.json.preharnix`) before the first activation, or set `home-manager.backupFileExtension`.
+By default the file is a read-only symlink into the Nix store, which makes Claude Code commands that write user settings at runtime (`/effort`, `/config`, plugin toggles) fail with `EROFS`. Set `mutable = true` to install the same rendered content as a writable copy instead: runtime commands work between switches, and each activation reinstalls the declared content (runtime edits are reset on rebuild — persist them in Nix).
+
+> First switch tip: if `~/.claude/settings.json` exists as a regular file from a previous manual edit, home-manager will refuse to symlink over it. Move it aside (`mv ~/.claude/settings.json ~/.claude/settings.json.preharnix`) before the first activation, or set `home-manager.backupFileExtension`. With `mutable = true` this does not apply — the activation script overwrites whatever is there.
 
 ## ⚠️ Runtime state
 
-`~/.claude.json`, `~/.pi/agent/mcp.json`, and (when enabled) `~/.claude/settings.json` are **fully owned by harnix**. Any changes made via CLI (`claude mcp add`, etc.) are overwritten on the next rebuild. To persist a change, declare it in your Nix config.
+`~/.claude.json`, `~/.pi/agent/mcp.json`, and (when enabled) `~/.claude/settings.json` are **fully owned by harnix**. Any changes made via CLI (`claude mcp add`, etc.) are overwritten on the next rebuild. To persist a change, declare it in your Nix config. With `settings.mutable = true`, runtime writes to `settings.json` survive until the next rebuild instead of failing immediately, but the declarative content still wins at every switch.
 
 ## Registry
 
