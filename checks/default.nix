@@ -88,7 +88,7 @@ in
   '';
 
   plugin-dir-exists-in-home-file = pkgs.runCommand "plugin-dir-test" {} ''
-    ls ${basicConfig.config.home.file.".claude/plugins/cache/claude-plugins-official/superpowers/5.0.7".source}
+    ls ${basicConfig.config.home.file.".claude/plugins/cache/claude-plugins-official/superpowers/6.0.3".source}
     touch $out
   '';
 

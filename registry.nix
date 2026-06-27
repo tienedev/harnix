@@ -5,12 +5,12 @@
     "superpowers@claude-plugins-official" = {
       marketplace = "claude-plugins-official";
       plugin      = "superpowers";
-      version     = "5.0.7";
+      version     = "6.0.3";
       src = pkgs.fetchFromGitHub {
         owner  = "obra";
         repo   = "superpowers";
-        rev    = "e4a2375cb705ca5800f0833528ce36a3faf9017a";
-        hash   = "sha256-AeICtdAfWRp0oCgQqd8LdrEWWtKNqUNWdvn0CGL18fA=";
+        rev    = "896224c4b1879920ab573417e68fd51d2ccc9072"; # v6.0.3
+        hash   = "sha256-+lT2a/qq0SF4k0PgnEDKiuidVlZX2p0vEso4d/5T1os=";
       };
       subpath   = "";
       hasSkills = true;
