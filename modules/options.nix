@@ -273,6 +273,61 @@ in
         default     = {};
         description = "Override registry pins. Key is 'name@marketplace', value is a derivation.";
       };
+
+      registry = lib.mkOption {
+        type = lib.types.attrsOf (lib.types.submodule {
+          options = {
+            marketplace = lib.mkOption {
+              type = lib.types.str;
+              description = "Marketplace / vendor name (path segment in the plugin cache).";
+            };
+            plugin = lib.mkOption {
+              type = lib.types.str;
+              description = "Plugin name (path segment in the plugin cache).";
+            };
+            version = lib.mkOption {
+              type = lib.types.str;
+              description = "Plugin version (path segment in the plugin cache).";
+            };
+            src = lib.mkOption {
+              type = lib.types.package;
+              description = "Source derivation, e.g. pkgs.fetchFromGitHub.";
+            };
+            subpath = lib.mkOption {
+              type = lib.types.str;
+              default = "";
+              description = ''Subdirectory of src that is the plugin root ("" = repo root).'';
+            };
+            hasSkills = lib.mkOption {
+              type = lib.types.bool;
+              default = false;
+              description = "Whether the plugin ships skills under skills/.";
+            };
+          };
+        });
+        default = {};
+        description = ''
+          Consumer-declared plugin registry entries, keyed by 'name@marketplace'.
+          Merged over harnix's built-in registry.nix (consumer entries win), so a
+          host can add a plugin without editing harnix. Enable an entry the usual
+          way via ai.plugins.claude-code.user / .project.
+        '';
+        example = lib.literalExpression ''
+          {
+            "mattpocock-skills@mattpocock" = {
+              marketplace = "mattpocock";
+              plugin      = "mattpocock-skills";
+              version     = "1.2.3";
+              src = pkgs.fetchFromGitHub {
+                owner = "mattpocock"; repo = "skills";
+                rev = "..."; hash = "...";
+              };
+              subpath   = "";
+              hasSkills = true;
+            };
+          }
+        '';
+      };
     };
 
     agents = lib.mkOption {

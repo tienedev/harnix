@@ -7,8 +7,9 @@ let
   resolveEntry = id:
     let
       override = cfg.plugins.claude-code.sources.${id} or null;
-      entry    = registry.claude-code.${id}
-        or (throw "harnix: unknown plugin '${id}' — add it to registry.nix or set ai.plugins.claude-code.sources.\"${id}\"");
+      entry    = cfg.plugins.claude-code.registry.${id}
+        or (registry.claude-code.${id}
+        or (throw "harnix: unknown plugin '${id}' — add it to registry.nix or ai.plugins.claude-code.registry.\"${id}\""));
     in
     if override != null then entry // { src = override; } else entry;
 
