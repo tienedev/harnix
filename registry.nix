@@ -1,4 +1,20 @@
 { pkgs }:
+let
+  # trailofbits/skills is a monorepo: one pinned checkout, one plugin per subdir.
+  trailofbitsSrc = pkgs.fetchFromGitHub {
+    owner  = "trailofbits";
+    repo   = "skills";
+    rev    = "d7f76b532d1e4c6e7757e04d25c99ab60dd5e32c";
+    hash   = "sha256-eNMo3T1pX0mEVOjxQQwO65NRpSYmcSlUS2sLqo5h1Bo=";
+  };
+  trailofbits = plugin: version: {
+    marketplace = "trailofbits";
+    inherit plugin version;
+    src       = trailofbitsSrc;
+    subpath   = plugin;
+    hasSkills = false;
+  };
+in
 {
   claude-code = {
     # upstream: github.com/obra/superpowers — "claude-plugins-official" is the marketplace vendor name
@@ -30,60 +46,9 @@
       hasSkills = true;
     };
 
-    "burpsuite-project-parser@trailofbits" = {
-      marketplace = "trailofbits";
-      plugin      = "burpsuite-project-parser";
-      version     = "1.0.0";
-      src = pkgs.fetchFromGitHub {
-        owner  = "trailofbits";
-        repo   = "skills";
-        rev    = "d7f76b532d1e4c6e7757e04d25c99ab60dd5e32c";
-        hash   = "sha256-eNMo3T1pX0mEVOjxQQwO65NRpSYmcSlUS2sLqo5h1Bo=";
-      };
-      subpath   = "burpsuite-project-parser";
-      hasSkills = false;
-    };
-
-    "insecure-defaults@trailofbits" = {
-      marketplace = "trailofbits";
-      plugin      = "insecure-defaults";
-      version     = "1.0.0";
-      src = pkgs.fetchFromGitHub {
-        owner  = "trailofbits";
-        repo   = "skills";
-        rev    = "d7f76b532d1e4c6e7757e04d25c99ab60dd5e32c";
-        hash   = "sha256-eNMo3T1pX0mEVOjxQQwO65NRpSYmcSlUS2sLqo5h1Bo=";
-      };
-      subpath   = "insecure-defaults";
-      hasSkills = false;
-    };
-
-    "firebase-apk-scanner@trailofbits" = {
-      marketplace = "trailofbits";
-      plugin      = "firebase-apk-scanner";
-      version     = "2.1.0";
-      src = pkgs.fetchFromGitHub {
-        owner  = "trailofbits";
-        repo   = "skills";
-        rev    = "d7f76b532d1e4c6e7757e04d25c99ab60dd5e32c";
-        hash   = "sha256-eNMo3T1pX0mEVOjxQQwO65NRpSYmcSlUS2sLqo5h1Bo=";
-      };
-      subpath   = "firebase-apk-scanner";
-      hasSkills = false;
-    };
-
-    "audit-context-building@trailofbits" = {
-      marketplace = "trailofbits";
-      plugin      = "audit-context-building";
-      version     = "1.0.0";
-      src = pkgs.fetchFromGitHub {
-        owner  = "trailofbits";
-        repo   = "skills";
-        rev    = "d7f76b532d1e4c6e7757e04d25c99ab60dd5e32c";
-        hash   = "sha256-eNMo3T1pX0mEVOjxQQwO65NRpSYmcSlUS2sLqo5h1Bo=";
-      };
-      subpath   = "audit-context-building";
-      hasSkills = false;
-    };
+    "burpsuite-project-parser@trailofbits" = trailofbits "burpsuite-project-parser" "1.0.0";
+    "insecure-defaults@trailofbits"        = trailofbits "insecure-defaults"        "1.0.0";
+    "firebase-apk-scanner@trailofbits"     = trailofbits "firebase-apk-scanner"     "2.1.0";
+    "audit-context-building@trailofbits"   = trailofbits "audit-context-building"   "1.0.0";
   };
 }

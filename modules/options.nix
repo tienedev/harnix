@@ -1,5 +1,11 @@
 { lib, ... }:
 let
+  # An absolute path as a string: a Nix path literal would be copied into the
+  # store, which is exactly what secret options must avoid.
+  secretFile = lib.types.strMatching "/.*" // {
+    description = "absolute path to a secret file (string, not a Nix path)";
+  };
+
   mcpServerModule = lib.types.submodule {
     options = {
       type = lib.mkOption {
@@ -25,7 +31,38 @@ let
       headers = lib.mkOption {
         type    = lib.types.attrsOf lib.types.str;
         default = {};
-        description = "HTTP headers (http only, e.g. Authorization).";
+        description = ''
+          HTTP headers (http and sse only). Values are copied into the
+          world-readable Nix store: use secretHeaders for tokens.
+        '';
+      };
+      secretHeaders = lib.mkOption {
+        type    = lib.types.attrsOf secretFile;
+        default = {};
+        example = { Authorization = "/run/secrets/my-mcp-auth"; };
+        description = ''
+          HTTP headers (http and sse only) whose value is read at activation
+          time from a file, e.g. a sops-nix / agenix secret path. The file holds
+          the full header value (e.g. "Bearer xyz"); a trailing newline is
+          stripped. The value never enters the Nix store.
+        '';
+      };
+      env = lib.mkOption {
+        type    = lib.types.attrsOf lib.types.str;
+        default = {};
+        description = ''
+          Environment variables (stdio only). Values are copied into the
+          world-readable Nix store: use secretEnv for tokens.
+        '';
+      };
+      secretEnv = lib.mkOption {
+        type    = lib.types.attrsOf secretFile;
+        default = {};
+        example = { GITHUB_TOKEN = "/run/secrets/github-token"; };
+        description = ''
+          Environment variables (stdio only) whose value is read at activation
+          time from a file. Same semantics as secretHeaders.
+        '';
       };
     };
   };
@@ -58,12 +95,12 @@ let
         description = "Pi max_turns. null omits the field (unlimited).";
       };
       tools = lib.mkOption {
-        type = lib.types.either (lib.types.enum [ "all" "none" ]) (lib.types.listOf lib.types.str);
+        type = lib.types.either (lib.types.enum [ "all" "none" ]) (lib.types.nonEmptyListOf lib.types.str);
         default = "all";
         description = "Pi tools: \"all\" omits the field, \"none\" disables built-ins, list = explicit allowlist.";
       };
       extensions = lib.mkOption {
-        type = lib.types.either lib.types.bool (lib.types.listOf lib.types.str);
+        type = lib.types.either lib.types.bool (lib.types.nonEmptyListOf lib.types.str);
         default = true;
         description = "Pi extensions: true omits, false disables, list = explicit MCP server names.";
       };
@@ -264,7 +301,11 @@ in
       project = lib.mkOption {
         type        = lib.types.attrsOf (lib.types.listOf lib.types.str);
         default     = {};
-        description = "Project-scope plugins keyed by absolute project path.";
+        description = ''
+          Project-scope plugins keyed by absolute project path. Installed with
+          scope "local" and enabled in <project>/.claude/settings.local.json;
+          projects missing on the current host are skipped.
+        '';
         example     = { "/home/titi/Projets/pentest" = [ "burpsuite-project-parser@trailofbits" ]; };
       };
 
@@ -334,6 +375,21 @@ in
       type        = lib.types.attrsOf agentModule;
       default     = {};
       description = "User-level subagent definitions, rendered into ~/.pi/agent/agents/<name>.md and ~/.claude/agents/<name>.md.";
+    };
+
+    pi.enable = lib.mkOption {
+      type        = lib.types.bool;
+      default     = true;
+      description = "Render Pi configuration (~/.pi/agent/mcp.json and Pi agents).";
+    };
+
+    claudeCode.enable = lib.mkOption {
+      type        = lib.types.bool;
+      default     = true;
+      description = ''
+        Render Claude Code configuration: the mcpServers key of ~/.claude.json,
+        plugins, agents and (with settings.enable) settings.json.
+      '';
     };
 
     claudeCode.settings = lib.mkOption {

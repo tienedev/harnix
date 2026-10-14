@@ -1,38 +1,34 @@
 { config, lib, pkgs, ... }:
 let
-  cfg       = config.ai;
-  harnixLib = import ../../lib.nix { inherit lib pkgs; };
-  registry  = import ../../registry.nix { inherit pkgs; };
+  pluginsCfg = config.ai.plugins.claude-code;
+  harnixLib  = import ../../lib.nix { inherit lib pkgs; };
+  registry   = import ../../registry.nix { inherit pkgs; };
 
-  resolveEntry = id:
-    let
-      override = cfg.plugins.claude-code.sources.${id} or null;
-      entry    = cfg.plugins.claude-code.registry.${id}
-        or (registry.claude-code.${id}
-        or (throw "harnix: unknown plugin '${id}'"));
-    in
-    if override != null then entry // { src = override; } else entry;
+  resolveEntry = harnixLib.resolvePluginEntry { inherit pluginsCfg registry; };
 
-  allPluginIds = lib.unique (
-    cfg.plugins.claude-code.user
-    ++ lib.concatLists (lib.attrValues cfg.plugins.claude-code.project)
-  );
+  skillPlugins = builtins.filter (e: e.hasSkills or false)
+    (map resolveEntry (harnixLib.allPluginIds pluginsCfg));
 
-  skillPlugins = builtins.filter (id: (resolveEntry id).hasSkills or false) allPluginIds;
+  # Skills land in ~/.agents/skills/<plugin>/, so two marketplaces shipping a
+  # plugin with the same name would silently shadow each other.
+  duplicateNames = lib.attrNames (lib.filterAttrs (_: n: n > 1)
+    (lib.foldl' (acc: e: acc // { ${e.plugin} = (acc.${e.plugin} or 0) + 1; }) {} skillPlugins));
 
-  skillDirEntries = lib.listToAttrs (map (id:
-    let e = resolveEntry id;
-    in {
-      name  = ".agents/skills/${e.plugin}";
-      value = {
-        source = harnixLib.mkSkillsDrv {
-          inherit (e) src subpath;
-          name = "${e.marketplace}-${e.plugin}";
-        };
+  skillDirEntries = lib.listToAttrs (map (e: {
+    name  = ".agents/skills/${e.plugin}";
+    value = {
+      source = harnixLib.mkSkillsDrv {
+        inherit (e) src subpath;
+        name = "${e.marketplace}-${e.plugin}";
       };
-    }
-  ) skillPlugins);
+    };
+  }) skillPlugins);
 in
 lib.mkIf (skillPlugins != []) {
+  assertions = [{
+    assertion = duplicateNames == [];
+    message   = "harnix: several enabled plugins with skills are named ${lib.concatStringsSep ", " duplicateNames}; their ~/.agents/skills/<plugin> directories would collide.";
+  }];
+
   home.file = skillDirEntries;
 }

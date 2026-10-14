@@ -6,7 +6,7 @@ let
   agents = cfg.agents;
 
   # Per-agent file entries for Pi (~/.pi/agent/agents/<name>.md).
-  piAgents = lib.filterAttrs (_n: a: a.pi.enable) agents;
+  piAgents = lib.filterAttrs (_n: a: cfg.pi.enable && a.pi.enable) agents;
   piEntries = lib.mapAttrs' (name: agent:
     lib.nameValuePair ".pi/agent/agents/${name}.md" {
       source = harnixLib.mkAgentFile {
@@ -18,7 +18,7 @@ let
   ) piAgents;
 
   # Per-agent file entries for Claude Code (~/.claude/agents/<name>.md).
-  ccAgents = lib.filterAttrs (_n: a: a.claudeCode.enable) agents;
+  ccAgents = lib.filterAttrs (_n: a: cfg.claudeCode.enable && a.claudeCode.enable) agents;
   ccEntries = lib.mapAttrs' (name: agent:
     lib.nameValuePair ".claude/agents/${name}.md" {
       source = harnixLib.mkAgentFile {
