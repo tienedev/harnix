@@ -60,7 +60,7 @@ Each tool can be switched off: `ai.pi.enable = false;` or `ai.claudeCode.enable 
 | `sse`, `http` | `url` | `headers`, `secretHeaders` |
 | `stdio` | `command` | `args`, `env`, `secretEnv` |
 
-Mixing fields across transports is rejected at evaluation time.
+A missing required field, or a field that does not apply to the transport (often a forgotten `type = "stdio"`: the default is `"sse"`), prints a warning at evaluation time.
 
 ### Secrets
 
@@ -122,9 +122,9 @@ ai.claudeCode.settings = {
 };
 ```
 
-`enabledPlugins` is derived from `ai.plugins.claude-code.user`. Project-scope plugins (`ai.plugins.claude-code.project`) are enabled in `<project>/.claude/settings.local.json` instead: harnix merges `enabledPlugins."<id>" = true` into that file and keeps everything else in it; entries it stops declaring, including for a project removed from the configuration, are removed again. Projects whose directory does not exist on the current host are skipped, so one config can list projects of several machines. `mcpJsonScope.enableAllProjectMcpServers` defaults to `false` (CVE-2026-21852 mitigation); use `enabledMcpjsonServers` to allowlist specific server names from project `.mcp.json` files.
+`enabledPlugins` is derived from `ai.plugins.claude-code.user`. Project-scope plugins (`ai.plugins.claude-code.project`) are enabled in `<project>/.claude/settings.local.json` instead: harnix merges `enabledPlugins."<id>" = true` into that file and keeps everything else in it; entries it stops declaring, including for a project removed from the configuration, are removed again. When harnix creates that file inside a git repository, it adds it to `.git/info/exclude`, as Claude Code does. Projects whose directory does not exist on the current host are skipped, so one config can list projects of several machines. `mcpJsonScope.enableAllProjectMcpServers` defaults to `false` (CVE-2026-21852 mitigation); use `enabledMcpjsonServers` to allowlist specific server names from project `.mcp.json` files.
 
-The default `permissions` block bans reads of `~/.ssh`, `~/.aws`, `~/.gnupg`, `/run/secrets`, asks for `Bash`/`Write`/`Edit`/`mcp__*`, and allows the read-only tools (`Read`, `Glob`, `Grep`, `WebFetch`, `WebSearch`, `Task`, `Skill`). Override the whole `permissions` attrset if you need a different policy — there is no shallow merge. Setting `permissions`, `hooks`, `enabledPlugins` or the MCP scope keys through `extra` prints a warning, since it silently replaces the dedicated option.
+The default `permissions` block bans reads of `~/.ssh`, `~/.aws`, `~/.gnupg`, `/run/secrets` and edits of `/etc`, `~/.ssh`, `~/.aws`, `~/.gnupg` (`Edit(...)` rules cover every file-writing tool; Claude Code ignores `Write(path)` deny rules), asks for `Bash`/`Write`/`Edit`/`mcp__*`, and allows the read-only tools (`Read`, `Glob`, `Grep`, `WebFetch`, `WebSearch`, `Task`, `Skill`). Override the whole `permissions` attrset if you need a different policy — there is no shallow merge. Setting `permissions`, `hooks`, `enabledPlugins` or the MCP scope keys through `extra` prints a warning, since it silently replaces the dedicated option.
 
 > The deny list is a speed bump, not a sandbox. `Read(~/.ssh/**)` does not stop `cat ~/.ssh/id_ed25519` through `Bash`, and `Bash(curl * | sh*)` is bypassed by `curl … | bash -` or `sh <(curl …)`. The real gate is `Bash` being in `ask`; if you move it to `allow`, add a `PreToolUse` hook for the patterns you care about.
 

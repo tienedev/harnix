@@ -95,12 +95,12 @@ let
         description = "Pi max_turns. null omits the field (unlimited).";
       };
       tools = lib.mkOption {
-        type = lib.types.either (lib.types.enum [ "all" "none" ]) (lib.types.nonEmptyListOf lib.types.str);
+        type = lib.types.either (lib.types.enum [ "all" "none" ]) (lib.types.listOf lib.types.str);
         default = "all";
         description = "Pi tools: \"all\" omits the field, \"none\" disables built-ins, list = explicit allowlist.";
       };
       extensions = lib.mkOption {
-        type = lib.types.either lib.types.bool (lib.types.nonEmptyListOf lib.types.str);
+        type = lib.types.either lib.types.bool (lib.types.listOf lib.types.str);
         default = true;
         description = "Pi extensions: true omits, false disables, list = explicit MCP server names.";
       };
@@ -226,10 +226,12 @@ let
             "Read(~/.config/sops/**)"
             "Read(/run/secrets/**)"
             "Read(./**/.env)" "Read(./**/.env.*)"
-            "Write(/etc/**)"  "Edit(/etc/**)"
-            "Write(~/.ssh/**)" "Edit(~/.ssh/**)"
-            "Write(~/.aws/**)" "Edit(~/.aws/**)"
-            "Write(~/.gnupg/**)" "Edit(~/.gnupg/**)"
+            # Edit(...) rules cover every file-writing tool; Claude Code
+            # ignores Write(path) deny rules and warns about them.
+            "Edit(/etc/**)"
+            "Edit(~/.ssh/**)"
+            "Edit(~/.aws/**)"
+            "Edit(~/.gnupg/**)"
             "Bash(curl * | sh*)"  "Bash(curl * | bash*)"
             "Bash(wget * | sh*)"  "Bash(wget * | bash*)"
             "Bash(sudo rm -rf:*)" "Bash(rm -rf /:*)" "Bash(rm -rf ~:*)"

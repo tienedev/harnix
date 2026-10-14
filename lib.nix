@@ -1,8 +1,16 @@
 { lib, pkgs }:
 let
-  # Render a string as a YAML scalar. A JSON string literal is a valid YAML
-  # double-quoted scalar, so this escapes `:`, `#`, quotes and newlines.
-  yamlStr = builtins.toJSON;
+  # Render a string as a YAML scalar. Plain text stays unquoted (so simple
+  # values render as before); anything else — `: `, ` #`, quotes, newlines,
+  # leading indicators, YAML 1.1 booleans/null — becomes a JSON string
+  # literal, which is a valid YAML double-quoted scalar.
+  yamlStr = s:
+    let
+      plain    = builtins.match "[A-Za-z_][A-Za-z0-9 _.,/()+'-]*" s != null
+              && !(lib.hasSuffix " " s);
+      reserved = lib.elem (lib.toLower s) [ "true" "false" "yes" "no" "on" "off" "y" "n" "null" ];
+    in
+    if plain && !reserved then s else builtins.toJSON s;
 
   # Secret file → JSON path specs for one MCP server. `prefix` is the path of
   # the server object inside the rendered document.
@@ -10,17 +18,16 @@ let
     lib.mapAttrsToList (key: file: { path = prefix ++ [ name "headers" key ]; inherit file; }) server.secretHeaders
     ++ lib.mapAttrsToList (key: file: { path = prefix ++ [ name "env" key ]; inherit file; }) server.secretEnv;
 
-  jsonTool = pkgs.writeShellApplication {
-    name          = "harnix-json";
-    runtimeInputs = [ pkgs.coreutils pkgs.jq ];
-    text          = builtins.readFile ./scripts/harnix-json.sh;
-    # jq filters are single-quoted on purpose: their $vars are jq variables.
-    excludeShellChecks = [ "SC2016" ];
-  };
+  # Shellchecked by the flake checks rather than at build time, so consumers
+  # do not pull shellcheck into their closure.
+  jsonTool = pkgs.writeShellScript "harnix-json" ''
+    export PATH=${lib.makeBinPath [ pkgs.coreutils pkgs.gnugrep pkgs.jq ]}:$PATH
+    ${builtins.readFile ./scripts/harnix-json.sh}
+  '';
 
-  mkJsonSpecValue = { name, target, content, merge ? "replace", secrets ? [], prune ? null, ifDirExists ? null }:
+  mkJsonSpecValue = { name, target, content, merge ? "replace", secrets ? [], prune ? null, ifDirExists ? null, gitExclude ? null }:
     assert lib.elem merge [ "replace" "top" "deep" ];
-    { inherit name target content merge secrets prune ifDirExists; ifTargetExists = false; };
+    { inherit name target content merge secrets prune ifDirExists gitExclude; ifTargetExists = false; };
 
   mkJsonSpec = args:
     pkgs.writeText "harnix-${args.name}.json" (builtins.toJSON (mkJsonSpecValue args));
@@ -107,12 +114,14 @@ in
   #   prune    — path of an object whose keys harnix manages: keys it wrote
   #              before and no longer declares are removed.
   #   ifDirExists — absolute directory; when set and missing, do nothing.
-  mkJsonInstaller = args: "${jsonTool}/bin/harnix-json install ${mkJsonSpec args}";
+  #   gitExclude  — { repo; path; }: when the file is created inside a git
+  #                 repository, add it to .git/info/exclude.
+  mkJsonInstaller = args: "${jsonTool} install ${mkJsonSpec args}";
 
   # Command pruning, under `scope`, the targets of a previous activation that
   # are absent from `installers` (a list of mkJsonInstaller arguments).
   mkJsonGc = scope: installers:
-    "${jsonTool}/bin/harnix-json gc ${lib.escapeShellArg scope} ${
+    "${jsonTool} gc ${lib.escapeShellArg scope} ${
       pkgs.writeText "harnix-gc-${scope}.json" (builtins.toJSON (map mkJsonSpecValue installers))
     }";
 

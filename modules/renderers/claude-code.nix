@@ -77,20 +77,28 @@ let
     prune       = [ "enabledPlugins" ];
     content.enabledPlugins = lib.genAttrs ids (_: true);
     ifDirExists = projectPath;
-  }) (lib.filterAttrs (_: ids: ids != []) pluginsCfg.project);
+    # Claude Code gitignores this file when it creates it; do the same.
+    gitExclude  = { repo = projectPath; path = ".claude/settings.local.json"; };
+  }) (lib.filterAttrs (path: ids: ids != [] && lib.hasPrefix "/" path) pluginsCfg.project);
+
+  relativeProjects = lib.filter (path: !lib.hasPrefix "/" path) (lib.attrNames pluginsCfg.project);
 in
 lib.mkIf cfg.claudeCode.enable {
-  assertions = map (path: {
-    assertion = lib.hasPrefix "/" path;
-    message   = "ai.plugins.claude-code.project: \"${path}\" must be an absolute path.";
-  }) (lib.attrNames pluginsCfg.project);
+  warnings = map (path:
+    "ai.plugins.claude-code.project: \"${path}\" is not an absolute path; its plugins are not enabled in the project settings."
+  ) relativeProjects;
 
   home.file = lib.mkIf hasPlugins pluginDirEntries;
 
+  # Entry name kept from earlier releases so configurations ordering their
+  # own activation scripts against it keep working.
+  home.activation.claudeJsonMcpServers = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+    run ${claudeJsonInstaller}
+  '';
+
   # After linkGeneration: a previous generation may have installed
   # installed_plugins.json as a store symlink that must be cleaned up first.
-  home.activation.harnixClaudeCode = lib.hm.dag.entryAfter [ "linkGeneration" ] (''
-    run ${claudeJsonInstaller}
+  home.activation.harnixClaudePlugins = lib.hm.dag.entryAfter [ "linkGeneration" ] (''
     run ${installedPluginsInstaller}
     run ${harnixLib.mkJsonGc "claude-projects" projectSpecs}
   '' + lib.concatMapStrings (spec: ''

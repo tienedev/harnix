@@ -1,6 +1,6 @@
 # harnix-json — install JSON documents described by a spec file, at
-# home-manager activation time. Built with writeShellApplication (strict mode,
-# coreutils + jq on PATH, shellchecked).
+# home-manager activation time. Wrapped by lib.nix (jsonTool), which puts
+# coreutils, grep and jq on PATH; shellchecked by the flake checks.
 #
 #   harnix-json install SPEC
 #   harnix-json gc SCOPE SPECS
@@ -18,6 +18,9 @@
 #                   readable regular file is skipped with a warning
 #   ifDirExists     null, or a directory that must exist (else no-op)
 #   ifTargetExists  when true, a missing target is not created
+#   gitExclude      null, or { repo, path }: when the target is created and
+#                   repo/.git is a directory, /path is added to its
+#                   info/exclude (as Claude Code does for local settings)
 #   prune           null, or a path to an object whose keys harnix manages:
 #                   keys written by a previous run and no longer in `content`
 #                   are deleted (state kept under $XDG_STATE_HOME/harnix)
@@ -25,6 +28,8 @@
 # gc runs `install` with empty content for every spec recorded under SCOPE by
 # a previous run but absent from SPECS (a JSON array of specs), so entries of
 # a target that left the configuration are pruned too, then records SPECS.
+
+set -euo pipefail
 
 stateDir="${XDG_STATE_HOME:-$HOME/.local/state}/harnix"
 
@@ -44,6 +49,21 @@ jq_atomic() {
   fi
   chmod 600 "$tmp"
   mv -f "$tmp" "$dest"
+}
+
+# Add the spec's gitExclude path to the repository's local exclude file.
+git_exclude() {
+  local repo path exclude
+  repo="$(jq -r '.gitExclude.repo // empty' "$1")"
+  path="$(jq -r '.gitExclude.path // empty' "$1")"
+  if [ -z "$repo" ] || [ ! -d "$repo/.git" ]; then
+    return 0
+  fi
+  exclude="$repo/.git/info/exclude"
+  mkdir -p "$(dirname "$exclude")"
+  if ! grep -qxF "/$path" "$exclude" 2> /dev/null; then
+    printf '/%s\n' "$path" >> "$exclude"
+  fi
 }
 
 install_spec() {
@@ -71,8 +91,12 @@ install_spec() {
     esac
   fi
 
-  if [ ! -e "$target" ] && [ "$(jq -r '.ifTargetExists // false' "$spec")" = true ]; then
-    return 0
+  local created=false
+  if [ ! -e "$target" ]; then
+    if [ "$(jq -r '.ifTargetExists // false' "$spec")" = true ]; then
+      return 0
+    fi
+    created=true
   fi
   mkdir -p "$(dirname "$target")"
 
@@ -120,6 +144,10 @@ install_spec() {
   done
 
   jq_atomic "$target" "${jqArgs[@]}" "$filter" "${input[@]}"
+
+  if [ "$created" = true ]; then
+    git_exclude "$spec"
+  fi
 
   if [ "$prune" != null ]; then
     mkdir -p "$stateDir/keys"

@@ -25,10 +25,8 @@ let
   }) skillPlugins);
 in
 lib.mkIf (skillPlugins != []) {
-  assertions = [{
-    assertion = duplicateNames == [];
-    message   = "harnix: several enabled plugins with skills are named ${lib.concatStringsSep ", " duplicateNames}; their ~/.agents/skills/<plugin> directories would collide.";
-  }];
+  warnings = lib.optional (duplicateNames != [])
+    "harnix: several enabled plugins with skills are named ${lib.concatStringsSep ", " duplicateNames}; they share ~/.agents/skills/<plugin> and only one of each is installed.";
 
   home.file = skillDirEntries;
 }

@@ -56,6 +56,9 @@ let
       description = "Use when: the user asks # for \"quotes\"\nsecond line";
       body        = ./test-agent-body.md;
     };
+    # Would parse as a boolean / start a YAML sequence if left unquoted.
+    ai.agents.boolish = { description = "Yes"; body = ./test-agent-body.md; };
+    ai.agents.dashed  = { description = "- starts like a list"; body = ./test-agent-body.md; };
   };
 
   settingsConfig = mkHome {
@@ -89,11 +92,12 @@ let
   # the installer gets /harnix-test-project rewritten to $proj first.
   activationRelocated = hm: names: ''
     run() {
-      local args=() a
+      local args=() a out
       for a in "$@"; do
         if [[ $a == *.json ]]; then
-          sed "s|/harnix-test-project|$proj|g" "$a" > "$TMPDIR/spec-$RANDOM.json"
-          a="$(ls -t "$TMPDIR"/spec-*.json | head -1)"
+          out="$(mktemp "$TMPDIR/spec-XXXXXX.json")"
+          sed "s|/harnix-test-project|$proj|g" "$a" > "$out"
+          a="$out"
         fi
         args+=("$a")
       done
@@ -122,7 +126,7 @@ in
   claude-json-merges-mcp-servers-and-keeps-other-keys = runTest "claude-json-merge" ''
     echo '{"oauthAccount":{"email":"x"},"mcpServers":{"stale":{"type":"sse","url":"u"}}}' > "$HOME/.claude.json"
     printf 'Bearer s3cret\n' > auth; printf 'tok' > token
-    ( ${activation basicConfig [ "harnixClaudeCode" ]} ) 3<auth 4<token 2>stderr
+    ( ${activation basicConfig [ "claudeJsonMcpServers" ]} ) 3<auth 4<token 2>stderr
 
     f="$HOME/.claude.json"
     [ ! -L "$f" ]
@@ -138,14 +142,14 @@ in
   '';
 
   claude-json-created-when-absent = runTest "claude-json-absent" ''
-    ( ${activation basicConfig [ "harnixClaudeCode" ]} ) 3</dev/null 4</dev/null 2>/dev/null
+    ( ${activation basicConfig [ "claudeJsonMcpServers" ]} ) 3</dev/null 4</dev/null 2>/dev/null
     jq -e '.mcpServers["titi-browser"].url == "http://titi-browser:9223/sse"' "$HOME/.claude.json" > /dev/null
   '';
 
   claude-json-malformed-left-untouched = runTest "claude-json-malformed" ''
     for bad in 'not json{' '1 {}' '[]'; do
       printf '%s' "$bad" > "$HOME/.claude.json"
-      ( ${activation basicConfig [ "harnixClaudeCode" ]} ) 3</dev/null 4</dev/null 2>stderr
+      ( ${activation basicConfig [ "claudeJsonMcpServers" ]} ) 3</dev/null 4</dev/null 2>stderr
       [ "$(cat "$HOME/.claude.json")" = "$bad" ]
       grep -q 'is not a single JSON object; leaving it untouched' stderr
     done
@@ -155,7 +159,7 @@ in
     mkdir dotfiles
     echo '{"keep":true}' > dotfiles/claude.json
     ln -s "$PWD/dotfiles/claude.json" "$HOME/.claude.json"
-    ( ${activation basicConfig [ "harnixClaudeCode" ]} ) 3</dev/null 4</dev/null 2>/dev/null
+    ( ${activation basicConfig [ "claudeJsonMcpServers" ]} ) 3</dev/null 4</dev/null 2>/dev/null
     [ -L "$HOME/.claude.json" ]
     jq -e '.keep and .mcpServers.local.command == "my-server"' dotfiles/claude.json > /dev/null
   '';
@@ -176,7 +180,7 @@ in
       };
     in
     runTest "claude-json-hostile" ''
-      ( ${activation hm [ "harnixClaudeCode" ]} ) 2>stderr
+      ( ${activation hm [ "claudeJsonMcpServers" ]} ) 2>stderr
       ! grep -qx PWNED stderr
       grep -qF 'secret file /nonexistent/$(echo PWNED >&2)`echo PWNED >&2` is not a readable file' stderr
       grep -qF 'secret file /dev/fd is not a readable file' stderr
@@ -221,7 +225,7 @@ in
       };
     in
     runTest "installed-plugins" ''
-      ${activation hm [ "harnixClaudeCode" ]}
+      ${activation hm [ "harnixClaudePlugins" ]}
       f="$HOME/.claude/plugins/installed_plugins.json"
       [ ! -L "$f" ] && [ -w "$f" ]
       jq -e '
@@ -240,10 +244,10 @@ in
     in
     runTest "installed-plugins-prune" ''
       f="$HOME/.claude/plugins/installed_plugins.json"
-      ${activation two [ "harnixClaudeCode" ]}
+      ${activation two [ "harnixClaudePlugins" ]}
       # A plugin installed by hand with /plugin install between two switches.
       jq '.plugins["manual@x"] = [{scope: "user"}]' "$f" > tmp && mv tmp "$f"
-      ${activation one [ "harnixClaudeCode" ]}
+      ${activation one [ "harnixClaudePlugins" ]}
       jq -e '(.plugins | keys) == ["insecure-defaults@trailofbits", "manual@x"]' "$f" > /dev/null
     '';
 
@@ -260,21 +264,62 @@ in
       mkdir -p "$proj/.claude"
       echo '{"permissions":{"allow":["Bash"]},"enabledPlugins":{"mine@x":true}}' > "$f"
 
-      ( ${activationRelocated both [ "harnixClaudeCode" ]} )
+      ( ${activationRelocated both [ "harnixClaudePlugins" ]} )
       jq -e '
         .permissions.allow == ["Bash"]
         and .enabledPlugins == {"mine@x": true, "insecure-defaults@trailofbits": true, "audit-context-building@trailofbits": true}
       ' "$f" > /dev/null
 
-      ( ${activationRelocated one [ "harnixClaudeCode" ]} )
+      ( ${activationRelocated one [ "harnixClaudePlugins" ]} )
       jq -e '.enabledPlugins == {"mine@x": true, "insecure-defaults@trailofbits": true}' "$f" > /dev/null
 
-      ( ${activationRelocated none [ "harnixClaudeCode" ]} )
+      ( ${activationRelocated none [ "harnixClaudePlugins" ]} )
       jq -e '.permissions.allow == ["Bash"] and .enabledPlugins == {"mine@x": true}' "$f" > /dev/null
     '';
 
+  # Created by harnix inside a git repository: excluded from git like Claude
+  # Code does; an existing file is not touched in that respect.
+  project-settings-local-created-is-git-excluded =
+    let
+      hm = mkHome { ai.plugins.claude-code.project."/harnix-test-project" = [ "insecure-defaults@trailofbits" ]; };
+    in
+    runTest "project-git-exclude" ''
+      proj="$TMPDIR/project"
+      mkdir -p "$proj/.git/info"
+      echo '# existing' > "$proj/.git/info/exclude"
+      ( ${activationRelocated hm [ "harnixClaudePlugins" ]} )
+      ( ${activationRelocated hm [ "harnixClaudePlugins" ]} )
+      # Deleted then recreated: the exclude line is not duplicated.
+      rm "$proj/.claude/settings.local.json"
+      ( ${activationRelocated hm [ "harnixClaudePlugins" ]} )
+      jq -e '.enabledPlugins == {"insecure-defaults@trailofbits": true}' "$proj/.claude/settings.local.json" > /dev/null
+      [ "$(cat "$proj/.git/info/exclude")" = "$(printf '# existing\n/.claude/settings.local.json')" ]
+
+      other="$TMPDIR/other"
+      mkdir -p "$other/.git/info" "$other/.claude"
+      echo '{}' > "$other/.claude/settings.local.json"
+      proj="$other"
+      ( ${activationRelocated hm [ "harnixClaudePlugins" ]} )
+      [ ! -e "$other/.git/info/exclude" ]
+    '';
+
+  # A relative project path only warns: no settings file is written, neither
+  # relative to $HOME nor to the working directory.
+  project-plugins-relative-path-not-written =
+    let
+      hm = mkHome { ai.plugins.claude-code.project."relative" = [ "insecure-defaults@trailofbits" ]; };
+    in
+    runTest "project-relative" ''
+      mkdir -p "$HOME/relative" relative
+      cd "$HOME"
+      ${activation hm [ "harnixClaudePlugins" ]}
+      [ ! -e "$HOME/relative/.claude" ]
+      jq -e '.plugins["insecure-defaults@trailofbits"][0].projectPath == "relative"' \
+        "$HOME/.claude/plugins/installed_plugins.json" > /dev/null
+    '';
+
   project-plugins-skip-absent-project = runTest "project-absent" ''
-    ( ${activation basicConfig [ "harnixClaudeCode" ]} ) 3</dev/null 4</dev/null 2>/dev/null
+    ${activation basicConfig [ "harnixClaudePlugins" ]}
     [ ! -e /harnix-test/absent-project ]
   '';
 
@@ -288,9 +333,9 @@ in
     touch $out
   '';
 
-  skills-duplicate-plugin-names-rejected =
+  skills-duplicate-plugin-names-warn =
     let
-      fork = {
+      hm = mkHome {
         ai.plugins.claude-code.registry."superpowers@fork" = {
           marketplace = "fork";
           plugin      = "superpowers";
@@ -298,18 +343,18 @@ in
           src         = pkgs.emptyDirectory;
           hasSkills   = true;
         };
+        ai.plugins.claude-code.user = [ "superpowers@claude-plugins-official" "superpowers@fork" ];
       };
     in
-    assert rejects
-      (lib.recursiveUpdate fork { ai.plugins.claude-code.user = [ "superpowers@claude-plugins-official" ]; })
-      { ai.plugins.claude-code.user = [ "superpowers@claude-plugins-official" "superpowers@fork" ]; };
+    assert lib.any (lib.hasInfix "named superpowers") hm.config.warnings;
+    assert !(lib.any (lib.hasInfix "named superpowers") basicConfig.config.warnings);
     pkgs.runCommand "skills-duplicate-test" {} "touch $out";
 
   # ------------------------------------------------------------------- agents
 
   pi-agent-generates-correctly = pkgs.runCommand "pi-agent-test" {} ''
     AGENT=${basicConfig.config.home.file.".pi/agent/agents/test-agent.md".source}
-    ${grep} -qx 'description: "Fixture agent for harnix checks."' "$AGENT"
+    ${grep} -qx 'description: Fixture agent for harnix checks.' "$AGENT"
     ${grep} -qx 'thinking: low'       "$AGENT"
     ${grep} -qx 'max_turns: 30'       "$AGENT"
     ${grep} -qx 'tools: bash, read'   "$AGENT"
@@ -325,29 +370,39 @@ in
 
   claude-code-agent-generates-correctly = pkgs.runCommand "cc-agent-test" {} ''
     AGENT=${basicConfig.config.home.file.".claude/agents/test-agent.md".source}
-    ${grep} -qx 'name: "test-agent"' "$AGENT"
-    ${grep} -qx 'description: "Fixture agent for harnix checks."' "$AGENT"
+    ${grep} -qx 'name: test-agent' "$AGENT"
+    ${grep} -qx 'description: Fixture agent for harnix checks.' "$AGENT"
     ${grep} -qx 'tools: Bash, Read' "$AGENT"
-    ${grep} -qx 'model: "sonnet"'   "$AGENT"
+    ${grep} -qx 'model: sonnet'     "$AGENT"
     ${grep} -q  'You are the test agent.' "$AGENT"
     touch $out
   '';
 
-  agent-frontmatter-is-valid-yaml = pkgs.runCommand "agent-yaml-test" {
-    nativeBuildInputs = [ (pkgs.python3.withPackages (ps: [ ps.pyyaml ])) ];
-  } ''
-    for f in ${basicConfig.config.home.file.".pi/agent/agents/tricky.md".source} \
-             ${basicConfig.config.home.file.".claude/agents/tricky.md".source}; do
-      python3 - "$f" <<'EOF'
-    import sys, yaml
-    text = open(sys.argv[1]).read()
-    fm = yaml.safe_load(text.split("---")[1])
-    want = 'Use when: the user asks # for "quotes"\nsecond line'
-    assert fm["description"] == want, fm
-    EOF
-    done
-    touch $out
-  '';
+  agent-frontmatter-is-valid-yaml =
+    let
+      files = tool: name: basicConfig.config.home.file."${tool}/${name}.md".source;
+      cases = {
+        tricky  = "Use when: the user asks # for \"quotes\"\nsecond line";
+        boolish = "Yes";
+        dashed  = "- starts like a list";
+        test-agent = "Fixture agent for harnix checks.";
+      };
+    in
+    pkgs.runCommand "agent-yaml-test" {
+      nativeBuildInputs = [ (pkgs.python3.withPackages (ps: [ ps.pyyaml ])) ];
+    } ''
+      ${lib.concatStrings (lib.mapAttrsToList (name: want:
+        lib.concatMapStrings (tool: ''
+          python3 - ${files tool name} ${lib.escapeShellArg want} <<'EOF'
+      import sys, yaml
+      text = open(sys.argv[1]).read()
+      fm = yaml.safe_load(text.split("---")[1])
+      assert fm["description"] == sys.argv[2], (fm, sys.argv[2])
+      EOF
+        '') [ ".pi/agent/agents" ".claude/agents" ]
+      ) cases)}
+      touch $out
+    '';
 
   # ----------------------------------------------------------------- settings
 
@@ -361,6 +416,8 @@ in
       and (.permissions.allow | index("mcp__*") | not)
       and (.permissions.deny | any(. == "Read(~/.ssh/**)"))
       and (.permissions.deny | any(. == "Read(/run/secrets/**)"))
+      and (.permissions.deny | any(. == "Edit(~/.ssh/**)"))
+      and (.permissions.deny | all(startswith("Write(") | not))
       and (.permissions.ask  | any(. == "Bash"))
       and (.permissions.ask  | any(. == "mcp__*"))
     ' ${pkgs.writeText "settings.json" settingsConfig.config.home.file.".claude/settings.json".text} > /dev/null
@@ -435,26 +492,58 @@ in
       };
       files = lib.attrNames (lib.filterAttrs (_: f: f.enable) hm.config.home.file);
     in
-    assert !(hm.config.home.activation ? harnixClaudeCode);
+    assert !(hm.config.home.activation ? claudeJsonMcpServers);
+    assert !(hm.config.home.activation ? harnixClaudePlugins);
     assert !(lib.any (lib.hasPrefix ".claude/") files);
     assert lib.elem ".pi/agent/agents/a.md" files;
     pkgs.runCommand "claude-code-disable-test" {} "touch $out";
 
   # --------------------------------------------------------------- validation
 
+  # Inconsistent fields only warn, so configurations that evaluated before
+  # keep evaluating; ambiguous use of the new secret options is rejected.
   mcp-server-options-are-validated =
     let
       http  = { ai.mcpServers.s = { type = "http"; url = "u"; }; };
       stdio = { ai.mcpServers.s = { type = "stdio"; command = "c"; }; };
+      warns = cfg: needle: lib.any (lib.hasInfix needle) (mkHome cfg).config.warnings;
+      clean = cfg: !(lib.any (lib.hasInfix "ai.mcpServers.s") (mkHome cfg).config.warnings);
+      with' = base: extra: lib.recursiveUpdate base extra;
     in
-    assert rejects http  { ai.mcpServers.s.url = null; };
-    assert rejects stdio { ai.mcpServers.s.command = null; };
-    assert rejects http  { ai.mcpServers.s.env.A = "1"; };
-    assert rejects http  { ai.mcpServers.s.secretEnv.A = "/s"; };
-    assert rejects stdio { ai.mcpServers.s.headers.A = "1"; };
-    assert rejects stdio { ai.mcpServers.s.url = "u"; };
-    assert rejects http  { ai.mcpServers.s = { headers.A = "1"; secretHeaders.A = "/s"; }; };
-    assert rejects { ai.plugins.claude-code.project."/abs" = [ "insecure-defaults@trailofbits" ]; }
-                   { ai.plugins.claude-code.project."relative" = [ "insecure-defaults@trailofbits" ]; };
+    assert clean http && clean stdio;
+    assert warns (with' http  { ai.mcpServers.s.url = null; })        "type \"http\" requires `url`";
+    assert warns (with' stdio { ai.mcpServers.s.command = null; })    "type \"stdio\" requires `command`";
+    assert warns (with' http  { ai.mcpServers.s.env.A = "1"; })       "only apply to type \"stdio\"";
+    assert warns (with' http  { ai.mcpServers.s.secretEnv.A = "/s"; }) "only apply to type \"stdio\"";
+    assert warns (with' stdio { ai.mcpServers.s.headers.A = "1"; })   "only apply to types \"sse\" and \"http\"";
+    assert warns (with' stdio { ai.mcpServers.s.url = "u"; })         "only apply to types \"sse\" and \"http\"";
+    assert rejects http { ai.mcpServers.s = { headers.A = "1"; secretHeaders.A = "/s"; }; };
+    assert warns { ai.plugins.claude-code.project."relative" = [ "insecure-defaults@trailofbits" ]; }
+                 "\"relative\" is not an absolute path";
     pkgs.runCommand "mcp-validation-test" {} "touch $out";
+
+  # Values accepted before this release must still evaluate and render the same.
+  backward-compatible-option-values =
+    let
+      hm = mkHome {
+        ai.agents.a = {
+          description = "d";
+          body        = ./test-agent-body.md;
+          pi = { tools = []; extensions = []; };
+        };
+      };
+    in
+    pkgs.runCommand "backward-compat-test" {} ''
+      ${grep} -qx 'tools: ' ${hm.config.home.file.".pi/agent/agents/a.md".source}
+      ${grep} -qx 'extensions: ' ${hm.config.home.file.".pi/agent/agents/a.md".source}
+      touch $out
+    '';
+
+  activation-script-passes-shellcheck = pkgs.runCommand "harnix-json-shellcheck" {
+    nativeBuildInputs = [ pkgs.shellcheck ];
+  } ''
+    # SC2016: jq filters are single-quoted on purpose.
+    shellcheck --shell=bash --exclude=SC2016 ${../scripts/harnix-json.sh}
+    touch $out
+  '';
 }
