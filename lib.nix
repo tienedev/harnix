@@ -43,13 +43,44 @@ let
         else "cp -r ${src}/${subpath} $out"
       );
 
+    # The skills a plugin ships, flattened into one directory for
+    # ~/.agents/skills/<plugin>. When .claude-plugin/plugin.json lists
+    # `skills` (a path or a list of paths, each a skill directory or a
+    # directory of skills), only those are taken, as Claude Code does;
+    # otherwise the whole skills/ directory is.
     mkSkillsDrv = { src, subpath, name }:
-      pkgs.runCommand "harnix-skills-${name}" {} (
+      pkgs.runCommand "harnix-skills-${name}" { nativeBuildInputs = [ pkgs.jq ]; } (
         let
-          skillsPath = if subpath == "" || subpath == "." then "${src}/skills" else "${src}/${subpath}/skills";
+          root = if subpath == "" || subpath == "." then "${src}" else "${src}/${subpath}";
         in ''
-          if [ -d "${skillsPath}" ]; then
-            cp -r "${skillsPath}" $out
+          root=${lib.escapeShellArg root}
+          manifest="$root/.claude-plugin/plugin.json"
+          add() {
+            local n
+            n="$(basename "$1")"
+            if [ -e "$out/$n" ]; then
+              echo "harnix: two skills named $n in ${name}" >&2
+              exit 1
+            fi
+            cp -r "$1" "$out/$n"
+          }
+          if [ -f "$manifest" ] && jq -e '.skills != null' "$manifest" > /dev/null; then
+            mkdir $out
+            while IFS= read -r rel; do
+              path="$root/$rel"
+              if [ -f "$path/SKILL.md" ]; then
+                add "$path"
+              elif [ -d "$path" ]; then
+                for dir in "$path"/*/; do
+                  if [ -f "$dir/SKILL.md" ]; then add "''${dir%/}"; fi
+                done
+              else
+                echo "harnix: ${name}: plugin.json lists skill path $rel, which does not exist" >&2
+                exit 1
+              fi
+            done < <(jq -r '.skills | if type == "string" then [.] else . end | .[]' "$manifest")
+          elif [ -d "$root/skills" ]; then
+            cp -r "$root/skills" $out
           else
             mkdir $out
           fi

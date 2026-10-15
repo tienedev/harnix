@@ -360,6 +360,39 @@ in
       touch $out
     '';
 
+  # ~/.agents/skills/<plugin> holds exactly the skills the plugin ships: the
+  # plugin.json `skills` list when present (list or single path, skill dirs
+  # or dirs of skills), else the whole skills/ directory as before.
+  plugin-skills-follow-manifest =
+    let
+      fakePlugin = manifest: pkgs.runCommand "fake-plugin" {} ''
+        for s in a/listed b/one b/two wip/unlisted; do
+          mkdir -p $out/skills/$s
+          echo "# $s" > $out/skills/$s/SKILL.md
+        done
+        ${lib.optionalString (manifest != null) ''
+          mkdir -p $out/.claude-plugin
+          echo ${lib.escapeShellArg (builtins.toJSON manifest)} > $out/.claude-plugin/plugin.json
+        ''}
+      '';
+      skills = manifest: harnixLib.mkSkillsDrv { src = fakePlugin manifest; subpath = ""; name = "fake"; };
+      list   = skills { name = "fake"; skills = [ "./skills/a/listed" "./skills/b" ]; };
+      single = skills { name = "fake"; skills = "./skills/b"; };
+      none   = skills { name = "fake"; };
+      legacy = skills null;
+      mattpocock = (import ../registry.nix { inherit pkgs; }).claude-code."mattpocock-skills@mattpocock";
+      real = harnixLib.mkSkillsDrv { inherit (mattpocock) src subpath; name = "mattpocock"; };
+    in
+    pkgs.runCommand "plugin-skills-manifest" {} ''
+      [ "$(ls ${list} | sort | tr "\n" " ")" = "listed one two " ]
+      [ "$(ls ${single} | sort | tr "\n" " ")" = "one two " ]
+      [ -f ${legacy}/wip/unlisted/SKILL.md ] && [ -f ${legacy}/a/listed/SKILL.md ]
+      [ -f ${none}/wip/unlisted/SKILL.md ]
+      # Matt Pocock's repo keeps in-progress/ and misc/ skills out of the plugin.
+      [ -f ${real}/tdd/SKILL.md ] && [ ! -e ${real}/loop-me ] && [ ! -e ${real}/in-progress ]
+      touch $out
+    '';
+
   skills-duplicate-plugin-names-warn =
     let
       hm = mkHome {

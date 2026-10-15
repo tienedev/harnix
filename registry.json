@@ -59,6 +59,21 @@
       "source": "github"
     }
   },
+  "mattpocock-skills@mattpocock": {
+    "marketplace": "mattpocock",
+    "plugin": "mattpocock-skills",
+    "version": "1.3.1",
+    "owner": "mattpocock",
+    "repo": "skills",
+    "rev": "49dd158d1076134a641b33efb035946536778336",
+    "hash": "sha256-NljCSZNI3sZ+vbCw7pRdrwR7try4BxOFp4gdjuWYtzs=",
+    "subpath": "",
+    "hasSkills": true,
+    "marketplaceSource": {
+      "source": "github",
+      "repo": "mattpocock/skills"
+    }
+  },
   "obsidian@obsidian-skills": {
     "marketplace": "obsidian-skills",
     "plugin": "obsidian",
