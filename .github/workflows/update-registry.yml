@@ -52,10 +52,11 @@ jobs:
             echo "Automated bump of \`registry.json\` pins (\`nix run .#update-registry\`)."
             echo "\`nix flake check\` passed in the workflow run."
             grep '^|' out.txt || true
-            if [ -s skipped.txt ]; then
+            # stderr also carries nix's build output; keep the script's notes.
+            if grep -q '; skipped' skipped.txt; then
               echo
               echo "Not applied:"
-              sed 's/^/- /' skipped.txt
+              grep '; skipped' skipped.txt | sed 's/^/- /'
             fi
           } > body.md
           git config user.name "github-actions[bot]"
