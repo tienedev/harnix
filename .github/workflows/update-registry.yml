@@ -1,0 +1,70 @@
+name: update-registry
+
+# Weekly bump of registry.json pins (scripts/update-registry.sh). Minor and
+# patch updates land in one rolling pull request; new major versions are
+# listed in it but only applied when run manually with `major`.
+
+on:
+  schedule:
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+    inputs:
+      major:
+        description: Also apply new major versions
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      BRANCH: registry/update
+    steps:
+      - uses: actions/checkout@v4
+      - uses: cachix/install-nix-action@v31
+
+      - name: Bump pins
+        run: |
+          nix run .#update-registry -- ${{ inputs.major && '--major' || '' }} > out.txt 2> skipped.txt
+          cat out.txt skipped.txt
+
+      - name: Check
+        run: |
+          if git diff --quiet registry.json; then
+            echo "No pin changed."
+            echo "CHANGED=false" >> "$GITHUB_ENV"
+          else
+            # PRs opened with GITHUB_TOKEN do not trigger the check workflow,
+            # so the full suite runs here before the PR exists.
+            nix flake check --print-build-logs
+            echo "CHANGED=true" >> "$GITHUB_ENV"
+          fi
+
+      - name: Open or update the pull request
+        if: env.CHANGED == 'true'
+        run: |
+          {
+            echo "Automated bump of \`registry.json\` pins (\`nix run .#update-registry\`)."
+            echo "\`nix flake check\` passed in the workflow run."
+            grep '^|' out.txt || true
+            if [ -s skipped.txt ]; then
+              echo
+              echo "Not applied:"
+              sed 's/^/- /' skipped.txt
+            fi
+          } > body.md
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -B "$BRANCH"
+          git commit -am "chore(registry): bump plugin pins"
+          git push --force origin "$BRANCH"
+          if [ "$(gh pr view "$BRANCH" --json state --jq .state 2> /dev/null)" = OPEN ]; then
+            gh pr edit "$BRANCH" --body-file body.md
+          else
+            gh pr create --base main --head "$BRANCH" --title "chore(registry): bump plugin pins" --body-file body.md
+          fi

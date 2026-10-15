@@ -1,6 +1,7 @@
 { pkgs, homeManagerConfiguration, harnixModule }:
 let
   lib = pkgs.lib;
+  harnixLib = import ../lib.nix { inherit lib pkgs; };
   jq  = "${pkgs.jq}/bin/jq";
   grep = "${pkgs.gnugrep}/bin/grep";
 
@@ -333,6 +334,27 @@ in
     touch $out
   '';
 
+  # Every built-in registry entry must build, and its subpath must be a plugin
+  # (a .claude-plugin/plugin.json, or a skills/ dir when hasSkills).
+  registry-entries-build =
+    let
+      registry = import ../registry.nix { inherit pkgs; };
+      check = id: e:
+        let
+          plugin = harnixLib.mkPluginDrv { inherit (e) src subpath; name = "check-${e.marketplace}-${e.plugin}"; };
+          skills = harnixLib.mkSkillsDrv { inherit (e) src subpath; name = "check-${e.marketplace}-${e.plugin}"; };
+        in ''
+          [ -f ${plugin}/.claude-plugin/plugin.json ] || { echo "${id}: no .claude-plugin/plugin.json at subpath" >&2; exit 1; }
+          ${lib.optionalString e.hasSkills ''
+            [ -n "$(ls -A ${skills})" ] || { echo "${id}: hasSkills but no skills/" >&2; exit 1; }
+          ''}
+        '';
+    in
+    pkgs.runCommand "registry-entries-build" {} ''
+      ${lib.concatStrings (lib.mapAttrsToList check registry.claude-code)}
+      touch $out
+    '';
+
   skills-duplicate-plugin-names-warn =
     let
       hm = mkHome {
@@ -611,7 +633,7 @@ in
     nativeBuildInputs = [ pkgs.shellcheck ];
   } ''
     # SC2016: jq filters are single-quoted on purpose.
-    shellcheck --shell=bash --exclude=SC2016 ${../scripts/harnix-json.sh}
+    shellcheck --shell=bash --exclude=SC2016 ${../scripts/harnix-json.sh} ${../scripts/update-registry.sh}
     touch $out
   '';
 }

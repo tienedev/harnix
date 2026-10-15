@@ -169,8 +169,17 @@ All writes are atomic (temp file + rename, mode `600`). A merged file that is no
 
 ## Registry
 
-`registry.nix` maps `"name@marketplace"` identifiers to pinned `fetchFromGitHub` calls. These pins are not flake inputs: `nix flake update` does not touch them. To bump one, update `rev`, `version` and `hash` (e.g. with `nix-prefetch-github <owner> <repo> --rev <tag>`). Submit a PR to add or update entries, or declare your own with `ai.plugins.claude-code.registry` without editing harnix.
+`registry.json` (read by `registry.nix`) maps `"name@marketplace"` identifiers to pinned upstream commits. These pins are not flake inputs: `nix flake update` does not touch them. To bump them, run from the repository root:
+
+```sh
+nix run .#update-registry                 # every entry, minor/patch only
+nix run .#update-registry -- --major ID   # also apply a new major version
+```
+
+The script reads each upstream `.claude-plugin/marketplace.json` to find the plugin's directory and version, detects `skills/`, and computes the hash `fetchFromGitHub` expects. A weekly workflow runs it and opens a pull request; new major versions are listed there but left for a deliberate update. The `registry-entries-build` check builds every entry, so a broken pin fails CI.
+
+To use a plugin that is not in the registry, declare it in your own configuration with `ai.plugins.claude-code.registry` instead of editing harnix.
 
 ## Contributing
 
-Run `nix flake check` before submitting (CI runs it on Linux and macOS). PRs welcome for new registry entries. Each entry needs: `marketplace`, `plugin`, `version`, `src` (fetchFromGitHub with exact `rev` + `hash`), `subpath`, `hasSkills`, `marketplaceSource`.
+Run `nix flake check` before submitting (CI runs it on Linux and macOS). PRs welcome for new registry entries: add an entry to `registry.json` (`marketplace`, `plugin`, `owner`, `repo`, `marketplaceSource`, any `rev`/`hash`/`version`), then `nix run .#update-registry -- --major <id>` fills in the rest.
