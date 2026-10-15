@@ -63,7 +63,7 @@ Claude Code loads a plugin only when three things line up, and harnix provides a
 
 With `ai.claudeCode.settings.enable = true`, 2 and 3 are part of the rendered `settings.json`. Without it, harnix merges just those entries into your existing `~/.claude/settings.json`, keeps everything else, and removes them again when you stop declaring the plugin. If that file is a store symlink owned by another module, harnix leaves it alone and warns. In that case, add the keys to that module.
 
-Claude Code clones a newly registered marketplace on its next start, and the plugin becomes available from the start after that.
+Claude Code clones a newly registered marketplace in the background when it starts, and the plugin becomes available from the next start. A very short session (e.g. `claude -p`) can exit before the clone finishes; `claude plugin marketplace add <owner>/<repo>` does it synchronously, without changing the declared settings.
 
 For a plugin that is not in the built-in registry, declare it with `ai.plugins.claude-code.registry` (see the option's example) and set `marketplaceSource`, e.g. `{ source = "github"; repo = "owner/repo"; }`.
 
