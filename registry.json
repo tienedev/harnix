@@ -5,8 +5,8 @@
     "version": "2.0.2",
     "owner": "trailofbits",
     "repo": "skills",
-    "rev": "e1f86a390d4caf28bf1c377a7d86707b2898669c",
-    "hash": "sha256-WkNajKsDW4F1GuMMqCh9YwimGi8SgHaLk0jt2q+RbGI=",
+    "rev": "1f68e03536f7980d4c0e6869596f708043a19443",
+    "hash": "sha256-DVyhXfKtZ4tquia+Na7YaZ/TvJzHT8FQixOK2DfN4P4=",
     "subpath": "plugins/audit-context-building",
     "hasSkills": true,
     "marketplaceSource": {
@@ -20,8 +20,8 @@
     "version": "1.1.2",
     "owner": "trailofbits",
     "repo": "skills",
-    "rev": "e1f86a390d4caf28bf1c377a7d86707b2898669c",
-    "hash": "sha256-WkNajKsDW4F1GuMMqCh9YwimGi8SgHaLk0jt2q+RbGI=",
+    "rev": "1f68e03536f7980d4c0e6869596f708043a19443",
+    "hash": "sha256-DVyhXfKtZ4tquia+Na7YaZ/TvJzHT8FQixOK2DfN4P4=",
     "subpath": "plugins/burpsuite-project-parser",
     "hasSkills": true,
     "marketplaceSource": {
@@ -35,8 +35,8 @@
     "version": "2.2.3",
     "owner": "trailofbits",
     "repo": "skills",
-    "rev": "e1f86a390d4caf28bf1c377a7d86707b2898669c",
-    "hash": "sha256-WkNajKsDW4F1GuMMqCh9YwimGi8SgHaLk0jt2q+RbGI=",
+    "rev": "1f68e03536f7980d4c0e6869596f708043a19443",
+    "hash": "sha256-DVyhXfKtZ4tquia+Na7YaZ/TvJzHT8FQixOK2DfN4P4=",
     "subpath": "plugins/firebase-apk-scanner",
     "hasSkills": true,
     "marketplaceSource": {
@@ -50,8 +50,8 @@
     "version": "2.0.3",
     "owner": "trailofbits",
     "repo": "skills",
-    "rev": "e1f86a390d4caf28bf1c377a7d86707b2898669c",
-    "hash": "sha256-WkNajKsDW4F1GuMMqCh9YwimGi8SgHaLk0jt2q+RbGI=",
+    "rev": "1f68e03536f7980d4c0e6869596f708043a19443",
+    "hash": "sha256-DVyhXfKtZ4tquia+Na7YaZ/TvJzHT8FQixOK2DfN4P4=",
     "subpath": "plugins/insecure-defaults",
     "hasSkills": false,
     "marketplaceSource": {
@@ -92,11 +92,11 @@
   "superpowers@claude-plugins-official": {
     "marketplace": "claude-plugins-official",
     "plugin": "superpowers",
-    "version": "6.0.3",
+    "version": "7.0.0",
     "owner": "obra",
     "repo": "superpowers",
-    "rev": "896224c4b1879920ab573417e68fd51d2ccc9072",
-    "hash": "sha256-+lT2a/qq0SF4k0PgnEDKiuidVlZX2p0vEso4d/5T1os=",
+    "rev": "bb92a77741419a4ab5f06e711a283343f1ada0c3",
+    "hash": "sha256-UCVI+T7j1Xh1LDkrvnJduis7eHFqrizCyGTWAGW5d6U=",
     "subpath": "",
     "hasSkills": true,
     "marketplaceSource": {
