@@ -14,6 +14,21 @@
       "source": "github"
     }
   },
+  "brag@brag": {
+    "marketplace": "brag",
+    "plugin": "brag",
+    "version": "0.4.0",
+    "owner": "latent-spaces",
+    "repo": "brag",
+    "rev": "069432cac935ed1895859df201c31436c07fb74e",
+    "hash": "sha256-nTufs0qKitbbZ6LnJOPrcDvIbjjek5gX81MPro5E7mA=",
+    "subpath": "",
+    "hasSkills": true,
+    "marketplaceSource": {
+      "source": "github",
+      "repo": "latent-spaces/brag"
+    }
+  },
   "burpsuite-project-parser@trailofbits": {
     "marketplace": "trailofbits",
     "plugin": "burpsuite-project-parser",
