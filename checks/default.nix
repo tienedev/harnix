@@ -324,8 +324,13 @@ in
     [ ! -e /harnix-test/absent-project ]
   '';
 
-  plugin-dir-exists-in-home-file = pkgs.runCommand "plugin-dir-test" {} ''
-    ls ${basicConfig.config.home.file.".claude/plugins/cache/claude-plugins-official/superpowers/6.0.3".source}
+  # The version comes from the registry so pin bumps do not break the check.
+  plugin-dir-exists-in-home-file =
+    let
+      v = (import ../registry.nix { inherit pkgs; }).claude-code."superpowers@claude-plugins-official".version;
+    in
+    pkgs.runCommand "plugin-dir-test" {} ''
+    ls ${basicConfig.config.home.file.".claude/plugins/cache/claude-plugins-official/superpowers/${v}".source}
     touch $out
   '';
 
