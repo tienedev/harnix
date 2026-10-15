@@ -296,7 +296,12 @@ in
     mcpServers = lib.mkOption {
       type        = lib.types.attrsOf mcpServerModule;
       default     = {};
-      description = "MCP servers declared once, rendered for every supported tool.";
+      description = ''
+        MCP servers declared once, rendered for every supported tool. Only
+        these are managed: servers added by hand (`claude mcp add -s user`,
+        `pi mcp add`) are kept, and a server removed from this set is removed
+        from the tools' configuration.
+      '';
     };
 
     plugins.claude-code = {

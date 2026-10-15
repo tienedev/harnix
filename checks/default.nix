@@ -125,7 +125,9 @@ in
   # ---------------------------------------------------------------- ~/.claude.json
 
   claude-json-merges-mcp-servers-and-keeps-other-keys = runTest "claude-json-merge" ''
-    echo '{"oauthAccount":{"email":"x"},"mcpServers":{"stale":{"type":"sse","url":"u"}}}' > "$HOME/.claude.json"
+    # `manual` was added with `claude mcp add -s user`; titi-browser exists
+    # with a field harnix no longer renders.
+    echo '{"oauthAccount":{"email":"x"},"mcpServers":{"manual":{"type":"sse","url":"u"},"titi-browser":{"type":"sse","url":"old","headers":{"X":"1"}}}}' > "$HOME/.claude.json"
     printf 'Bearer s3cret\n' > auth; printf 'tok' > token
     ( ${activation basicConfig [ "claudeJsonMcpServers" ]} ) 3<auth 4<token 2>stderr
 
@@ -134,13 +136,34 @@ in
     [ "$(stat -c %a "$f")" = 600 ]
     jq -e '
       .oauthAccount.email == "x"
-      and (.mcpServers | keys) == ["api", "local", "titi-browser"]
+      and (.mcpServers | keys) == ["api", "local", "manual", "titi-browser"]
+      and .mcpServers.manual == {type: "sse", url: "u"}
       and .mcpServers["titi-browser"] == {type: "sse", url: "http://titi-browser:9223/sse"}
       and .mcpServers.local == {type: "stdio", command: "my-server", args: ["--flag"], env: {PLAIN: "1", TOKEN: "tok"}}
       and .mcpServers.api == {type: "http", url: "https://mcp.example.com", headers: {"X-Static": "s", Authorization: "Bearer s3cret"}}
     ' "$f" > /dev/null
     grep -q 'secret file /dev/fd/9 is not a readable file; mcpServers.api.headers.X-Missing left unset' stderr
   '';
+
+  # Successive switches: a server harnix stops declaring is removed, servers
+  # added by hand stay, same for Claude Code and Pi.
+  mcp-servers-pruned-manual-ones-kept =
+    let
+      two = mkHome { ai.mcpServers = { a = { type = "http"; url = "https://a"; }; b = { type = "stdio"; command = "b"; }; }; };
+      one = mkHome { ai.mcpServers = { a = { type = "http"; url = "https://a2"; }; }; };
+    in
+    runTest "mcp-prune" ''
+      ${activation two [ "claudeJsonMcpServers" "harnixPiMcpJson" ]}
+      jq '.mcpServers.mine = {type: "stdio", command: "mine"}' "$HOME/.claude.json" > t && mv t "$HOME/.claude.json"
+      jq '.mcpServers.mine = {command: "mine"} | .settings = {keep: true}' "$HOME/.pi/agent/mcp.json" > t && mv t "$HOME/.pi/agent/mcp.json"
+      ${activation one [ "claudeJsonMcpServers" "harnixPiMcpJson" ]}
+      jq -e '(.mcpServers | keys) == ["a", "mine"] and .mcpServers.a.url == "https://a2"' "$HOME/.claude.json" > /dev/null
+      jq -e '(.mcpServers | keys) == ["a", "mine"] and .mcpServers.a.url == "https://a2" and .settings.keep' "$HOME/.pi/agent/mcp.json" > /dev/null
+      # Turning MCP off entirely still removes only what harnix declared.
+      ${activation (mkHome {}) [ "claudeJsonMcpServers" "harnixPiMcpJson" ]}
+      jq -e '(.mcpServers | keys) == ["mine"]' "$HOME/.claude.json" > /dev/null
+      jq -e '(.mcpServers | keys) == ["mine"]' "$HOME/.pi/agent/mcp.json" > /dev/null
+    '';
 
   claude-json-created-when-absent = runTest "claude-json-absent" ''
     ( ${activation basicConfig [ "claudeJsonMcpServers" ]} ) 3</dev/null 4</dev/null 2>/dev/null
