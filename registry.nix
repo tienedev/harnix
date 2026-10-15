@@ -13,6 +13,7 @@ let
     src       = trailofbitsSrc;
     subpath   = plugin;
     hasSkills = false;
+    marketplaceSource = { source = "github"; repo = "trailofbits/skills"; };
   };
 in
 {
@@ -30,6 +31,7 @@ in
       };
       subpath   = "";
       hasSkills = true;
+      marketplaceSource = { source = "github"; repo = "anthropics/claude-plugins-official"; };
     };
 
     "obsidian@obsidian-skills" = {
@@ -44,6 +46,7 @@ in
       };
       subpath   = "";
       hasSkills = true;
+      marketplaceSource = { source = "github"; repo = "kepano/obsidian-skills"; };
     };
 
     "burpsuite-project-parser@trailofbits" = trailofbits "burpsuite-project-parser" "1.0.0";

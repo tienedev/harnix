@@ -70,6 +70,26 @@ let
   # user enabled by hand are kept; projects absent on this host are skipped.
   # Entries harnix stops declaring are pruned, including for projects removed
   # from the configuration altogether (gc).
+  # Without harnix rendering settings.json, the user-level keys plugins need
+  # are merged into the existing file instead: enabledPlugins and
+  # extraKnownMarketplaces entries harnix declares (pruned when undeclared),
+  # everything else kept. A settings.json linked from the store belongs to
+  # another module and is left alone (warning).
+  pluginSettings = harnixLib.pluginSettings {
+    inherit pluginsCfg registry;
+    enabledOverrides = cfg.claudeCode.settings.enabledPlugins;
+  };
+  userSettingsInstallers = lib.mapAttrsToList (key: value: harnixLib.mkJsonInstaller {
+    name          = "claude-user-settings-${key}";
+    target        = ".claude/settings.json";
+    merge         = "deep";
+    prune         = [ key ];
+    content.${key} = value;
+    # Only create the file when there is something to put in it.
+    ifTargetExists = value == {};
+    skipStoreLink  = true;
+  }) { inherit (pluginSettings) enabledPlugins extraKnownMarketplaces; };
+
   projectSpecs = lib.mapAttrsToList (projectPath: ids: {
     name        = "claude-project-${builtins.hashString "sha256" projectPath}";
     target      = "${projectPath}/.claude/settings.local.json";
@@ -103,5 +123,8 @@ lib.mkIf cfg.claudeCode.enable {
     run ${harnixLib.mkJsonGc "claude-projects" projectSpecs}
   '' + lib.concatMapStrings (spec: ''
     run ${harnixLib.mkJsonInstaller spec}
-  '') projectSpecs);
+  '') projectSpecs
+  + lib.optionalString (!cfg.claudeCode.settings.enable) (lib.concatMapStrings (i: ''
+    run ${i}
+  '') userSettingsInstallers));
 }
