@@ -56,11 +56,13 @@ let
   };
 
   # Claude Code manages ~/.claude.json itself (auth, project state); harnix
-  # owns only the mcpServers key and keeps every other key.
+  # owns only the MCP servers it declares: servers added with
+  # `claude mcp add -s user` and every other key are kept.
   claudeJsonInstaller = harnixLib.mkJsonInstaller {
     name    = "claude-json";
     target  = ".claude.json";
-    merge   = "top";
+    merge   = "deep";
+    prune   = [ "mcpServers" ];
     content.mcpServers = lib.mapAttrs harnixLib.mkClaudeCodeMcpEntry cfg.mcpServers;
     secrets = harnixLib.mcpSecrets [ "mcpServers" ] cfg.mcpServers;
   };

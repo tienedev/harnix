@@ -6,7 +6,7 @@ One Nix declaration drives all your AI tools. MCP servers, Claude Code plugins, 
 
 ## Supported tools
 
-- **Claude Code** — `~/.claude.json` (mcpServers key only), `~/.claude/plugins/` (plugins + installed_plugins.json), `~/.claude/agents/`, `~/.claude/settings.json` (opt-in)
+- **Claude Code** — `~/.claude.json` (declared MCP servers only), `~/.claude/plugins/` (plugins + installed_plugins.json), `~/.claude/agents/`, `~/.claude/settings.json` (opt-in)
 - **Pi** — `~/.pi/agent/mcp.json`, `~/.pi/agent/agents/`
 - **Both** — `~/.agents/skills/` (Agent Skills standard, discovered natively by Pi)
 
@@ -73,6 +73,8 @@ For a plugin that is not in the built-in registry, declare it with `ai.plugins.c
 |---|---|---|
 | `sse`, `http` | `url` | `headers`, `secretHeaders` |
 | `stdio` | `command` | `args`, `env`, `secretEnv` |
+
+harnix manages only the servers it declares, in `~/.claude.json` and `~/.pi/agent/mcp.json`: each declared server is rewritten whole on every switch, a server you stop declaring is removed, and servers added by hand (`claude mcp add -s user`, `pi mcp add`) are left alone. A hand-added server with the same name as a declared one is replaced by the declared one.
 
 A missing required field, or a field that does not apply to the transport (often a forgotten `type = "stdio"`: the default is `"sse"`), prints a warning at evaluation time.
 
@@ -152,16 +154,16 @@ What harnix owns, and how it is installed:
 
 | Path | Ownership | Install |
 |---|---|---|
-| `~/.claude.json` | the `mcpServers` key only; auth and project state are kept | activation, merge |
+| `~/.claude.json` | declared MCP servers; hand-added servers, auth and project state are kept | activation, merge |
 | `~/.claude/plugins/installed_plugins.json` | records of declared plugins | activation, merge |
 | `~/.claude/plugins/cache/<mp>/<plugin>/<version>` | declared versions | store symlink |
 | `~/.claude/settings.json` (opt-in) | whole file | store symlink, or writable copy with `mutable` |
 | `~/.claude/settings.json` (settings not enabled) | `enabledPlugins` / `extraKnownMarketplaces` entries harnix declares | activation, merge |
 | `<project>/.claude/settings.local.json` | `enabledPlugins` entries harnix declares | activation, merge |
-| `~/.pi/agent/mcp.json` | whole file | activation, writable copy |
+| `~/.pi/agent/mcp.json` | declared MCP servers; hand-added servers and other keys are kept | activation, merge |
 | `~/.claude/agents/`, `~/.pi/agent/agents/`, `~/.agents/skills/` | declared entries | store symlinks |
 
-Files installed by activation are regular, writable files, so Claude Code / Pi can write them at runtime (`/plugin install`, `/mcp`) without hitting a read-only store file. Every activation reapplies what harnix owns: CLI changes to those parts (`claude mcp add`, editing a declared plugin, …) are lost on the next rebuild, while the rest of each file is kept (a plugin installed by hand stays in `installed_plugins.json`). Entries harnix wrote and no longer declares are removed; the record of what it wrote lives in `$XDG_STATE_HOME/harnix` (default `~/.local/state/harnix`). To persist a change, declare it in your Nix config.
+Files installed by activation are regular, writable files, so Claude Code / Pi can write them at runtime (`/plugin install`, `/mcp`) without hitting a read-only store file. Every activation reapplies what harnix owns: edits to those parts (changing a declared MCP server or plugin by hand, …) are lost on the next rebuild, while the rest of each file is kept: an MCP server added with `claude mcp add` or a plugin installed by hand stays. Entries harnix wrote and no longer declares are removed; the record of what it wrote lives in `$XDG_STATE_HOME/harnix` (default `~/.local/state/harnix`). To persist a change, declare it in your Nix config.
 
 All writes are atomic (temp file + rename, mode `600`). A merged file that is not a single JSON object (e.g. a corrupted `~/.claude.json`) is left untouched with a warning rather than overwritten.
 

@@ -26,7 +26,9 @@
 #                   info/exclude (as Claude Code does for local settings)
 #   prune           null, or a path to an object whose keys harnix manages:
 #                   keys written by a previous run and no longer in `content`
-#                   are deleted (state kept under $XDG_STATE_HOME/harnix)
+#                   are deleted, and declared keys are replaced whole rather
+#                   than merged; keys harnix never wrote are kept (state
+#                   under $XDG_STATE_HOME/harnix)
 #
 # gc runs `install` with empty content for every spec recorded under SCOPE by
 # a previous run but absent from SPECS (a JSON array of specs), so entries of
@@ -124,11 +126,19 @@ install_spec() {
 
   local keysFile="$stateDir/keys/$name.json" prune
   prune="$(jq -c '.prune' "$spec")"
-  if [ "$prune" != null ] && [ -f "$keysFile" ]; then
-    jqArgs+=(--slurpfile old "$keysFile")
-    # Drop every key written last time; the merge below writes back the ones
-    # still declared, so only the undeclared ones disappear.
-    filter+='(. // {}) | delpaths([$old[0][] as $k | $spec[0].prune + [$k]]) | '
+  if [ "$prune" != null ]; then
+    local oldKeys='[]'
+    if [ -f "$keysFile" ]; then
+      oldKeys="$(cat "$keysFile")"
+    fi
+    jqArgs+=(--argjson old "$oldKeys")
+    # Drop every key written last time and every key declared now; the merge
+    # below writes the declared ones back whole. Undeclared keys harnix wrote
+    # disappear, declared entries lose stale fields, all other keys stay.
+    filter+='(. // {}) | delpaths([
+      ($old + ($spec[0].content | getpath($spec[0].prune) // {} | keys))
+      | unique | .[] | $spec[0].prune + [.]
+    ]) | '
   fi
 
   case "$merge" in
