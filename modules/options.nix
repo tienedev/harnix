@@ -102,7 +102,13 @@ let
       extensions = lib.mkOption {
         type = lib.types.either lib.types.bool (lib.types.listOf lib.types.str);
         default = true;
-        description = "Pi extensions: true omits, false disables, list = explicit MCP server names.";
+        description = ''
+          Pi extensions (pi-subagents `extensions:`): true omits the field (all
+          default extensions), false loads none, a list loads only the named
+          extensions (an npm package matches by its short name). An agent that
+          reaches MCP through pi-mcp-adapter needs it listed, e.g.
+          [ "pi-mcp-adapter" ]; false would leave it without the `mcp` tool.
+        '';
       };
       body = lib.mkOption {
         type = lib.types.nullOr lib.types.path;
