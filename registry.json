@@ -1,0 +1,92 @@
+{
+  "audit-context-building@trailofbits": {
+    "marketplace": "trailofbits",
+    "plugin": "audit-context-building",
+    "version": "2.0.2",
+    "owner": "trailofbits",
+    "repo": "skills",
+    "rev": "e1f86a390d4caf28bf1c377a7d86707b2898669c",
+    "hash": "sha256-WkNajKsDW4F1GuMMqCh9YwimGi8SgHaLk0jt2q+RbGI=",
+    "subpath": "plugins/audit-context-building",
+    "hasSkills": true,
+    "marketplaceSource": {
+      "repo": "trailofbits/skills",
+      "source": "github"
+    }
+  },
+  "burpsuite-project-parser@trailofbits": {
+    "marketplace": "trailofbits",
+    "plugin": "burpsuite-project-parser",
+    "version": "1.1.2",
+    "owner": "trailofbits",
+    "repo": "skills",
+    "rev": "e1f86a390d4caf28bf1c377a7d86707b2898669c",
+    "hash": "sha256-WkNajKsDW4F1GuMMqCh9YwimGi8SgHaLk0jt2q+RbGI=",
+    "subpath": "plugins/burpsuite-project-parser",
+    "hasSkills": true,
+    "marketplaceSource": {
+      "repo": "trailofbits/skills",
+      "source": "github"
+    }
+  },
+  "firebase-apk-scanner@trailofbits": {
+    "marketplace": "trailofbits",
+    "plugin": "firebase-apk-scanner",
+    "version": "2.2.3",
+    "owner": "trailofbits",
+    "repo": "skills",
+    "rev": "e1f86a390d4caf28bf1c377a7d86707b2898669c",
+    "hash": "sha256-WkNajKsDW4F1GuMMqCh9YwimGi8SgHaLk0jt2q+RbGI=",
+    "subpath": "plugins/firebase-apk-scanner",
+    "hasSkills": true,
+    "marketplaceSource": {
+      "repo": "trailofbits/skills",
+      "source": "github"
+    }
+  },
+  "insecure-defaults@trailofbits": {
+    "marketplace": "trailofbits",
+    "plugin": "insecure-defaults",
+    "version": "2.0.3",
+    "owner": "trailofbits",
+    "repo": "skills",
+    "rev": "e1f86a390d4caf28bf1c377a7d86707b2898669c",
+    "hash": "sha256-WkNajKsDW4F1GuMMqCh9YwimGi8SgHaLk0jt2q+RbGI=",
+    "subpath": "plugins/insecure-defaults",
+    "hasSkills": false,
+    "marketplaceSource": {
+      "repo": "trailofbits/skills",
+      "source": "github"
+    }
+  },
+  "obsidian@obsidian-skills": {
+    "marketplace": "obsidian-skills",
+    "plugin": "obsidian",
+    "version": "1.0.1",
+    "owner": "kepano",
+    "repo": "obsidian-skills",
+    "rev": "3ccff5338ea700537839b21900aa5358a0402c98",
+    "hash": "sha256-kyH07EVmwIEC/q6i91Kz8mPE78j9ITga2NZUpU1+nHU=",
+    "subpath": "",
+    "hasSkills": true,
+    "marketplaceSource": {
+      "repo": "kepano/obsidian-skills",
+      "source": "github"
+    }
+  },
+  "superpowers@claude-plugins-official": {
+    "marketplace": "claude-plugins-official",
+    "plugin": "superpowers",
+    "version": "6.0.3",
+    "owner": "obra",
+    "repo": "superpowers",
+    "rev": "896224c4b1879920ab573417e68fd51d2ccc9072",
+    "hash": "sha256-+lT2a/qq0SF4k0PgnEDKiuidVlZX2p0vEso4d/5T1os=",
+    "subpath": "",
+    "hasSkills": true,
+    "marketplaceSource": {
+      "repo": "anthropics/claude-plugins-official",
+      "source": "github"
+    }
+  }
+}
