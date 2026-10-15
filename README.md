@@ -2,12 +2,12 @@
 
 > Declarative AI agent configuration for NixOS / home-manager.
 
-One Nix declaration drives all your AI tools. MCP servers, Claude Code plugins, and agent skills are pinned, reproducible, and overwritten on rebuild. CLI additions don't persist — the config is the truth.
+One Nix declaration drives all your AI tools. MCP servers, Claude Code plugins, and agent skills are pinned, reproducible, and reapplied on rebuild. CLI additions to the parts harnix owns don't persist — the config is the truth.
 
 ## Supported tools
 
-- **Claude Code** — `~/.claude.json` (mcpServers), `~/.claude/plugins/` (plugins + installed_plugins.json)
-- **Pi** — `~/.pi/agent/mcp.json`
+- **Claude Code** — `~/.claude.json` (mcpServers key only), `~/.claude/plugins/` (plugins + installed_plugins.json), `~/.claude/agents/`, `~/.claude/settings.json` (opt-in)
+- **Pi** — `~/.pi/agent/mcp.json`, `~/.pi/agent/agents/`
 - **Both** — `~/.agents/skills/` (Agent Skills standard, discovered natively by Pi)
 
 ## Usage
@@ -17,12 +17,19 @@ One Nix declaration drives all your AI tools. MCP servers, Claude Code plugins, 
 inputs.harnix.url = "github:tienedev/harnix";
 
 # home.nix
-{ inputs, ... }: {
-  imports = [ inputs.harnix.homeManagerModules.default ];
+{ inputs, config, ... }: {
+  imports = [ inputs.harnix.homeModules.default ];  # homeManagerModules.default still works
 
   ai.mcpServers.titi-browser = {
     type = "sse";
     url  = "http://titi-browser:9223/sse";
+  };
+
+  ai.mcpServers.github = {
+    type      = "stdio";
+    command   = "github-mcp-server";
+    args      = [ "stdio" ];
+    secretEnv.GITHUB_PERSONAL_ACCESS_TOKEN = config.sops.secrets.github-token.path;
   };
 
   ai.plugins.claude-code.user = [
@@ -43,6 +50,31 @@ inputs.harnix.url = "github:tienedev/harnix";
     };
 }
 ```
+
+Each tool can be switched off: `ai.pi.enable = false;` or `ai.claudeCode.enable = false;` (both default to `true`).
+
+## MCP servers (`ai.mcpServers`)
+
+| `type` | Required | Optional |
+|---|---|---|
+| `sse`, `http` | `url` | `headers`, `secretHeaders` |
+| `stdio` | `command` | `args`, `env`, `secretEnv` |
+
+A missing required field, or a field that does not apply to the transport (often a forgotten `type = "stdio"`: the default is `"sse"`), prints a warning at evaluation time.
+
+### Secrets
+
+`headers` and `env` values are written into the Nix store, which is world-readable. For tokens, use `secretHeaders` / `secretEnv`: each value is the **absolute path, as a string,** of a file read at activation time (sops-nix, agenix, or a plain `chmod 600` file). The file holds the full value (e.g. `Bearer xyz` for an `Authorization` header); a trailing newline is stripped. A path that is not a readable regular file only prints a warning and leaves that header/variable out, so a secret that is not decrypted yet never blocks a switch. It is only picked up at the next activation, though: make sure secrets are decrypted first (system-level sops-nix/agenix secrets are), or switch again.
+
+```nix
+ai.mcpServers.my-api = {
+  type = "http";
+  url  = "https://mcp.example.com";
+  secretHeaders.Authorization = "/run/secrets/my-api-auth";
+};
+```
+
+Files that may carry secrets (`~/.claude.json`, `~/.pi/agent/mcp.json`) are written with mode `600`. If one of them is a symlink managed by a dotfiles tool, harnix writes through the link, so the decrypted values end up in that target: keep it out of version control.
 
 ## Agents (`ai.agents`)
 
@@ -90,9 +122,11 @@ ai.claudeCode.settings = {
 };
 ```
 
-`enabledPlugins` is derived from `ai.plugins.claude-code.user`. `mcpJsonScope.enableAllProjectMcpServers` defaults to `false` (CVE-2026-21852 mitigation); use `enabledMcpjsonServers` to allowlist specific server names from project `.mcp.json` files.
+`enabledPlugins` is derived from `ai.plugins.claude-code.user`. Project-scope plugins (`ai.plugins.claude-code.project`) are enabled in `<project>/.claude/settings.local.json` instead: harnix merges `enabledPlugins."<id>" = true` into that file and keeps everything else in it; entries it stops declaring, including for a project removed from the configuration, are removed again. When harnix creates that file inside a git repository, it adds it to `.git/info/exclude`, as Claude Code does. Projects whose directory does not exist on the current host are skipped, so one config can list projects of several machines. `mcpJsonScope.enableAllProjectMcpServers` defaults to `false` (CVE-2026-21852 mitigation); use `enabledMcpjsonServers` to allowlist specific server names from project `.mcp.json` files.
 
-The default `permissions` block bans reads of `~/.ssh`, `~/.aws`, `~/.gnupg`, `/run/secrets`, asks for `Bash`/`Write`/`Edit`/`mcp__*`, and allows the read-only tools (`Read`, `Glob`, `Grep`, `WebFetch`, `WebSearch`, `Task`, `Skill`). Override the whole `permissions` attrset if you need a different policy — there is no shallow merge.
+The default `permissions` block bans reads of `~/.ssh`, `~/.aws`, `~/.gnupg`, `/run/secrets` and edits of `/etc`, `~/.ssh`, `~/.aws`, `~/.gnupg` (`Edit(...)` rules cover every file-writing tool; Claude Code ignores `Write(path)` deny rules), asks for `Bash`/`Write`/`Edit`/`mcp__*`, and allows the read-only tools (`Read`, `Glob`, `Grep`, `WebFetch`, `WebSearch`, `Task`, `Skill`). Override the whole `permissions` attrset if you need a different policy — there is no shallow merge. Setting `permissions`, `hooks`, `enabledPlugins` or the MCP scope keys through `extra` prints a warning, since it silently replaces the dedicated option.
+
+> The deny list is a speed bump, not a sandbox. `Read(~/.ssh/**)` does not stop `cat ~/.ssh/id_ed25519` through `Bash`, and `Bash(curl * | sh*)` is bypassed by `curl … | bash -` or `sh <(curl …)`. The real gate is `Bash` being in `ask`; if you move it to `allow`, add a `PreToolUse` hook for the patterns you care about.
 
 By default the file is a read-only symlink into the Nix store, which makes Claude Code commands that write user settings at runtime (`/effort`, `/config`, plugin toggles) fail with `EROFS`. Set `mutable = true` to install the same rendered content as a writable copy instead: runtime commands work between switches, and each activation reinstalls the declared content (runtime edits are reset on rebuild — persist them in Nix).
 
@@ -100,12 +134,28 @@ By default the file is a read-only symlink into the Nix store, which makes Claud
 
 ## ⚠️ Runtime state
 
-`~/.claude.json`, `~/.pi/agent/mcp.json`, and (when enabled) `~/.claude/settings.json` are **fully owned by harnix**. Any changes made via CLI (`claude mcp add`, etc.) are overwritten on the next rebuild. To persist a change, declare it in your Nix config. With `settings.mutable = true`, runtime writes to `settings.json` survive until the next rebuild instead of failing immediately, but the declarative content still wins at every switch.
+What harnix owns, and how it is installed:
+
+| Path | Ownership | Install |
+|---|---|---|
+| `~/.claude.json` | the `mcpServers` key only; auth and project state are kept | activation, merge |
+| `~/.claude/plugins/installed_plugins.json` | records of declared plugins | activation, merge |
+| `~/.claude/plugins/cache/<mp>/<plugin>/<version>` | declared versions | store symlink |
+| `~/.claude/settings.json` (opt-in) | whole file | store symlink, or writable copy with `mutable` |
+| `<project>/.claude/settings.local.json` | `enabledPlugins` entries harnix declares | activation, merge |
+| `~/.pi/agent/mcp.json` | whole file | activation, writable copy |
+| `~/.claude/agents/`, `~/.pi/agent/agents/`, `~/.agents/skills/` | declared entries | store symlinks |
+
+Files installed by activation are regular, writable files, so Claude Code / Pi can write them at runtime (`/plugin install`, `/mcp`) without hitting a read-only store file. Every activation reapplies what harnix owns: CLI changes to those parts (`claude mcp add`, editing a declared plugin, …) are lost on the next rebuild, while the rest of each file is kept (a plugin installed by hand stays in `installed_plugins.json`). Entries harnix wrote and no longer declares are removed; the record of what it wrote lives in `$XDG_STATE_HOME/harnix` (default `~/.local/state/harnix`). To persist a change, declare it in your Nix config.
+
+All writes are atomic (temp file + rename, mode `600`). A merged file that is not a single JSON object (e.g. a corrupted `~/.claude.json`) is left untouched with a warning rather than overwritten.
+
+> Rolling back to a harnix version older than this layout: `installed_plugins.json` and `~/.pi/agent/mcp.json` used to be store symlinks, and home-manager refuses to replace the regular files that now sit there. Delete them first, or set `home-manager.backupFileExtension`.
 
 ## Registry
 
-`registry.nix` maps `"name@marketplace"` identifiers to pinned `fetchFromGitHub` calls. Run `nix flake update` to bump all pins. Submit a PR to add or update entries.
+`registry.nix` maps `"name@marketplace"` identifiers to pinned `fetchFromGitHub` calls. These pins are not flake inputs: `nix flake update` does not touch them. To bump one, update `rev`, `version` and `hash` (e.g. with `nix-prefetch-github <owner> <repo> --rev <tag>`). Submit a PR to add or update entries, or declare your own with `ai.plugins.claude-code.registry` without editing harnix.
 
 ## Contributing
 
-PRs welcome for new registry entries. Each entry needs: `marketplace`, `plugin`, `version`, `src` (fetchFromGitHub with exact `rev` + `hash`), `subpath`, `hasSkills`.
+Run `nix flake check` before submitting (CI runs it on Linux and macOS). PRs welcome for new registry entries. Each entry needs: `marketplace`, `plugin`, `version`, `src` (fetchFromGitHub with exact `rev` + `hash`), `subpath`, `hasSkills`.

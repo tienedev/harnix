@@ -1,27 +1,16 @@
 { config, lib, pkgs, ... }:
 let
-  cfg      = config.ai;
-  harnixLib = import ../../lib.nix { inherit lib pkgs; };
-  registry  = import ../../registry.nix { inherit pkgs; };
+  cfg        = config.ai;
+  pluginsCfg = cfg.plugins.claude-code;
+  harnixLib  = import ../../lib.nix { inherit lib pkgs; };
+  registry   = import ../../registry.nix { inherit pkgs; };
 
-  resolveEntry = id:
-    let
-      override = cfg.plugins.claude-code.sources.${id} or null;
-      entry    = cfg.plugins.claude-code.registry.${id}
-        or (registry.claude-code.${id}
-        or (throw "harnix: unknown plugin '${id}' — add it to registry.nix or ai.plugins.claude-code.registry.\"${id}\""));
-    in
-    if override != null then entry // { src = override; } else entry;
+  resolveEntry = harnixLib.resolvePluginEntry { inherit pluginsCfg registry; };
 
-  resolvedPlugins = lib.genAttrs
-    (lib.unique (cfg.plugins.claude-code.user
-      ++ lib.concatLists (lib.attrValues cfg.plugins.claude-code.project)))
-    (id:
-      let e = resolveEntry id;
-      in e // { drv = harnixLib.mkPluginDrv { inherit (e) src subpath; name = "${e.marketplace}-${e.plugin}"; }; }
-    );
-
-  mcpServersRendered = lib.mapAttrs harnixLib.mkClaudeCodeMcpEntry cfg.mcpServers;
+  resolvedPlugins = lib.genAttrs (harnixLib.allPluginIds pluginsCfg) (id:
+    let e = resolveEntry id;
+    in e // { drv = harnixLib.mkPluginDrv { inherit (e) src subpath; name = "${e.marketplace}-${e.plugin}"; }; }
+  );
 
   mkEntry = scope: id: extraAttrs:
     let p = resolvedPlugins.${id};
@@ -34,56 +23,85 @@ let
       gitCommitSha = p.src.rev or "unknown";
     } // extraAttrs;
 
-  installedPluginsJson = builtins.toJSON {
+  # One installation record per (plugin, scope[, project]). A plugin enabled
+  # both user-wide and in projects gets one record for each.
+  installRecords =
+    map (id: { inherit id; entry = mkEntry "user" id {}; }) pluginsCfg.user
+    ++ lib.concatLists (lib.mapAttrsToList (projectPath: ids:
+      map (id: { inherit id; entry = mkEntry "local" id { inherit projectPath; }; }) ids
+    ) pluginsCfg.project);
+
+  installedPlugins = {
     version = 2;
-    plugins =
-      lib.listToAttrs (map (id: {
-        name  = id;
-        value = [ (mkEntry "user" id {}) ];
-      }) cfg.plugins.claude-code.user)
-      // lib.foldl (acc: pair:
-        let
-          projectPath = pair.name;
-          ids         = pair.value;
-        in
-        acc // lib.listToAttrs (map (id: {
-          name  = id;
-          value = [ (mkEntry "local" id { inherit projectPath; }) ];
-        }) ids)
-      ) {} (lib.mapAttrsToList (k: v: { name = k; value = v; }) cfg.plugins.claude-code.project);
+    plugins = lib.foldl' (acc: r:
+      acc // { ${r.id} = (acc.${r.id} or []) ++ [ r.entry ]; }
+    ) {} installRecords;
   };
 
-  pluginDirEntries = lib.listToAttrs (map (id:
-    let p = resolvedPlugins.${id};
-    in {
-      name  = ".claude/plugins/cache/${p.marketplace}/${p.plugin}/${p.version}";
-      value = { source = p.drv; };
-    }
-  ) (lib.attrNames resolvedPlugins));
+  pluginDirEntries = lib.mapAttrs' (_id: p:
+    lib.nameValuePair ".claude/plugins/cache/${p.marketplace}/${p.plugin}/${p.version}" { source = p.drv; }
+  ) resolvedPlugins;
 
-  hasPlugins = cfg.plugins.claude-code.user != []
-            || cfg.plugins.claude-code.project != {};
-  mcpServersJson = lib.escapeShellArg (builtins.toJSON mcpServersRendered);
+  hasPlugins = resolvedPlugins != {};
+
+  # Claude Code rewrites installed_plugins.json itself (/plugin install,
+  # updates), so it is a writable file: harnix owns the records of the plugins
+  # it declares, removes those it stopped declaring, and keeps the others.
+  installedPluginsInstaller = harnixLib.mkJsonInstaller {
+    name    = "claude-installed-plugins";
+    target  = ".claude/plugins/installed_plugins.json";
+    merge   = "deep";
+    prune   = [ "plugins" ];
+    content = installedPlugins;
+  };
+
+  # Claude Code manages ~/.claude.json itself (auth, project state); harnix
+  # owns only the mcpServers key and keeps every other key.
+  claudeJsonInstaller = harnixLib.mkJsonInstaller {
+    name    = "claude-json";
+    target  = ".claude.json";
+    merge   = "top";
+    content.mcpServers = lib.mapAttrs harnixLib.mkClaudeCodeMcpEntry cfg.mcpServers;
+    secrets = harnixLib.mcpSecrets [ "mcpServers" ] cfg.mcpServers;
+  };
+
+  # Local-scope plugins are only loaded when enabled in the project's
+  # .claude/settings.local.json. Deep-merged so other keys and plugins the
+  # user enabled by hand are kept; projects absent on this host are skipped.
+  # Entries harnix stops declaring are pruned, including for projects removed
+  # from the configuration altogether (gc).
+  projectSpecs = lib.mapAttrsToList (projectPath: ids: {
+    name        = "claude-project-${builtins.hashString "sha256" projectPath}";
+    target      = "${projectPath}/.claude/settings.local.json";
+    merge       = "deep";
+    prune       = [ "enabledPlugins" ];
+    content.enabledPlugins = lib.genAttrs ids (_: true);
+    ifDirExists = projectPath;
+    # Claude Code gitignores this file when it creates it; do the same.
+    gitExclude  = { repo = projectPath; path = ".claude/settings.local.json"; };
+  }) (lib.filterAttrs (path: ids: ids != [] && lib.hasPrefix "/" path) pluginsCfg.project);
+
+  relativeProjects = lib.filter (path: !lib.hasPrefix "/" path) (lib.attrNames pluginsCfg.project);
 in
-{
-  home.file = lib.mkMerge [
-    (lib.mkIf hasPlugins (
-      { ".claude/plugins/installed_plugins.json".text = installedPluginsJson; }
-      // pluginDirEntries
-    ))
-  ];
+lib.mkIf cfg.claudeCode.enable {
+  warnings = map (path:
+    "ai.plugins.claude-code.project: \"${path}\" is not an absolute path; its plugins are not enabled in the project settings."
+  ) relativeProjects;
 
-  # Merge mcpServers into ~/.claude.json without overwriting auth tokens or other keys.
-  # Claude Code manages this file itself; we only own the mcpServers key.
+  home.file = lib.mkIf hasPlugins pluginDirEntries;
+
+  # Entry name kept from earlier releases so configurations ordering their
+  # own activation scripts against it keep working.
   home.activation.claudeJsonMcpServers = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
-    CLAUDE_JSON="$HOME/.claude.json"
-    MCP_SERVERS=${mcpServersJson}
-
-    if [ ! -f "$CLAUDE_JSON" ]; then
-      echo "{}" > "$CLAUDE_JSON"
-    fi
-
-    tmp=$(${pkgs.jq}/bin/jq --argjson mcp "$MCP_SERVERS" '.mcpServers = $mcp' "$CLAUDE_JSON")
-    echo "$tmp" > "$CLAUDE_JSON"
+    run ${claudeJsonInstaller}
   '';
+
+  # After linkGeneration: a previous generation may have installed
+  # installed_plugins.json as a store symlink that must be cleaned up first.
+  home.activation.harnixClaudePlugins = lib.hm.dag.entryAfter [ "linkGeneration" ] (''
+    run ${installedPluginsInstaller}
+    run ${harnixLib.mkJsonGc "claude-projects" projectSpecs}
+  '' + lib.concatMapStrings (spec: ''
+    run ${harnixLib.mkJsonInstaller spec}
+  '') projectSpecs);
 }

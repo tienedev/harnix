@@ -1,6 +1,7 @@
 { config, lib, pkgs, ... }:
 let
-  cfg = config.ai.claudeCode.settings;
+  cfg       = config.ai.claudeCode.settings;
+  harnixLib = import ../../lib.nix { inherit lib pkgs; };
 
   # Plugins from ai.plugins.claude-code.user are enabled by default. Per-key
   # override in cfg.enabledPlugins wins (set to false to disable an installed
@@ -18,8 +19,17 @@ let
   };
 
   rendered = base // cfg.extra;
+
+  # Keys of `extra` that silently replace a value harnix models directly.
+  shadowedKeys = lib.intersectLists (lib.attrNames base) (lib.attrNames cfg.extra);
+
+  mutableInstaller = harnixLib.mkJsonInstaller {
+    name    = "claude-settings";
+    target  = ".claude/settings.json";
+    content = rendered;
+  };
 in
-lib.mkIf cfg.enable {
+lib.mkIf (cfg.enable && config.ai.claudeCode.enable) {
   home.file.".claude/settings.json" = {
     text = builtins.toJSON rendered;
     enable = !cfg.mutable;
@@ -31,13 +41,18 @@ lib.mkIf cfg.enable {
   # runtime; the declared content is reapplied on every activation.
   home.activation.claudeCodeSettings = lib.mkIf cfg.mutable (
     lib.hm.dag.entryAfter [ "linkGeneration" ] ''
-      run install -m600 ${config.home.file.".claude/settings.json".source} "$HOME/.claude/settings.json"
+      run ${mutableInstaller}
     ''
   );
 
-  warnings = lib.optional cfg.mcpJsonScope.enableAllProjectMcpServers ''
-    ai.claudeCode.settings.mcpJsonScope.enableAllProjectMcpServers is true.
-    Any .mcp.json file in any project directory is now auto-trusted (CVE-2026-21852
-    class supply-chain risk). Prefer enabledMcpjsonServers as a per-name allowlist.
-  '';
+  warnings =
+    lib.optional cfg.mcpJsonScope.enableAllProjectMcpServers ''
+      ai.claudeCode.settings.mcpJsonScope.enableAllProjectMcpServers is true.
+      Any .mcp.json file in any project directory is now auto-trusted (CVE-2026-21852
+      class supply-chain risk). Prefer enabledMcpjsonServers as a per-name allowlist.
+    ''
+    ++ lib.optional (shadowedKeys != []) ''
+      ai.claudeCode.settings.extra overrides ${lib.concatStringsSep ", " shadowedKeys}, which
+      harnix renders from dedicated options. Set those options instead of using extra.
+    '';
 }
