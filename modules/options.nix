@@ -268,6 +268,7 @@ let
           Override which plugins are enabled. By default this is derived from
           ai.plugins.claude-code.user (every user-scope plugin is enabled).
           Set explicitly to disable a plugin without removing its installation.
+          Applies even when settings.json is not rendered by harnix.
         '';
       };
 
@@ -346,6 +347,16 @@ in
               default = false;
               description = "Whether the plugin ships skills under skills/.";
             };
+            marketplaceSource = lib.mkOption {
+              type = lib.types.nullOr (lib.types.attrsOf lib.types.anything);
+              default = null;
+              example = { source = "github"; repo = "owner/repo"; };
+              description = ''
+                Where Claude Code can fetch the marketplace, rendered into
+                extraKnownMarketplaces. Claude Code only loads a plugin whose
+                marketplace it knows; null leaves registering it to you.
+              '';
+            };
           };
         });
         default = {};
@@ -367,6 +378,7 @@ in
               };
               subpath   = "";
               hasSkills = true;
+              marketplaceSource = { source = "github"; repo = "mattpocock/skills"; };
             };
           }
         '';

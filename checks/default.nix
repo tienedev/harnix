@@ -439,6 +439,74 @@ in
     touch $out
   '';
 
+  settings-json-registers-plugin-marketplaces =
+    let
+      hm = mkHome {
+        ai.plugins.claude-code.user = [ "superpowers@claude-plugins-official" "obsidian@obsidian-skills" ];
+        ai.claudeCode.settings.enable = true;
+        ai.claudeCode.settings.extra.extraKnownMarketplaces.obsidian-skills.source = { source = "git"; url = "https://example.com/fork.git"; };
+      };
+    in
+    pkgs.runCommand "settings-marketplaces" {} ''
+      ${jq} -e '
+        .extraKnownMarketplaces == {
+          "claude-plugins-official": {source: {source: "github", repo: "anthropics/claude-plugins-official"}},
+          "obsidian-skills": {source: {source: "git", url: "https://example.com/fork.git"}}
+        }
+      ' ${pkgs.writeText "settings.json" hm.config.home.file.".claude/settings.json".text} > /dev/null
+      touch $out
+    '';
+
+  # settings.enable = false: what plugins need is merged into the user's own
+  # settings.json, and removed again once undeclared.
+  unmanaged-settings-get-plugin-keys-merged-then-pruned =
+    let
+      declared = mkHome {
+        ai.plugins.claude-code.user = [ "obsidian@obsidian-skills" "insecure-defaults@trailofbits" ];
+        ai.claudeCode.settings.enabledPlugins."insecure-defaults@trailofbits" = false;
+      };
+      none = mkHome {};
+    in
+    runTest "unmanaged-settings" ''
+      f="$HOME/.claude/settings.json"
+      mkdir -p "$HOME/.claude"
+      echo '{"theme":"dark","enabledPlugins":{"manual@x":true},"extraKnownMarketplaces":{"x":{"source":{"source":"github","repo":"me/x"}}}}' > "$f"
+      ${activation declared [ "harnixClaudePlugins" ]}
+      jq -e '
+        .theme == "dark"
+        and .enabledPlugins == {"manual@x": true, "obsidian@obsidian-skills": true, "insecure-defaults@trailofbits": false}
+        and (.extraKnownMarketplaces | keys) == ["obsidian-skills", "trailofbits", "x"]
+      ' "$f" > /dev/null
+      ${activation none [ "harnixClaudePlugins" ]}
+      jq -e '
+        .theme == "dark"
+        and .enabledPlugins == {"manual@x": true}
+        and (.extraKnownMarketplaces | keys) == ["x"]
+      ' "$f" > /dev/null
+    '';
+
+  unmanaged-settings-not-created-without-plugins = runTest "unmanaged-settings-absent" ''
+    ${activation (mkHome {}) [ "harnixClaudePlugins" ]}
+    [ ! -e "$HOME/.claude/settings.json" ]
+  '';
+
+  unmanaged-settings-owned-by-another-module-left-alone =
+    let
+      hm = mkHome { ai.plugins.claude-code.user = [ "obsidian@obsidian-skills" ]; };
+    in
+    runTest "unmanaged-settings-store-link" ''
+      mkdir -p "$HOME/.claude"
+      ln -s ${storeTarget} "$HOME/.claude/settings.json"
+      ( ${activation hm [ "harnixClaudePlugins" ]} ) 2>stderr
+      [ "$(readlink "$HOME/.claude/settings.json")" = ${storeTarget} ]
+      grep -q 'settings.json is managed by another Nix module; not updating it' stderr
+    '';
+
+  managed-settings-skip-the-merge =
+    assert !(lib.hasInfix "claude-user-settings" settingsConfig.config.home.activation.harnixClaudePlugins.data);
+    assert lib.hasInfix "claude-user-settings" basicConfig.config.home.activation.harnixClaudePlugins.data;
+    pkgs.runCommand "managed-settings-skip-merge" {} "touch $out";
+
   settings-json-warns-when-extra-shadows-options =
     let
       hm = mkHome {

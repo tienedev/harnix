@@ -18,6 +18,9 @@
 #                   readable regular file is skipped with a warning
 #   ifDirExists     null, or a directory that must exist (else no-op)
 #   ifTargetExists  when true, a missing target is not created
+#   skipStoreLink   when true, a target linked into the Nix store is owned
+#                   by another module: warn and leave it alone (instead of
+#                   replacing it as a stale home-manager link)
 #   gitExclude      null, or { repo, path }: when the target is created and
 #                   repo/.git is a directory, /path is added to its
 #                   info/exclude (as Claude Code does for local settings)
@@ -86,7 +89,13 @@ install_spec() {
   if [ -L "$target" ]; then
     real="$(readlink -f "$target" || true)"
     case "$real" in
-      /nix/store/* | "") ;;
+      /nix/store/*)
+        if [ "$(jq -r '.skipStoreLink // false' "$spec")" = true ]; then
+          warn "$target is managed by another Nix module; not updating it"
+          return 0
+        fi
+        ;;
+      "") ;;
       *) target="$real" ;;
     esac
   fi

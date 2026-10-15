@@ -2,23 +2,31 @@
 let
   cfg       = config.ai.claudeCode.settings;
   harnixLib = import ../../lib.nix { inherit lib pkgs; };
+  registry  = import ../../registry.nix { inherit pkgs; };
 
   # Plugins from ai.plugins.claude-code.user are enabled by default. Per-key
   # override in cfg.enabledPlugins wins (set to false to disable an installed
-  # plugin without removing the cache entry).
-  derivedEnabledPlugins =
-    lib.genAttrs config.ai.plugins.claude-code.user (_id: true) // cfg.enabledPlugins;
+  # plugin without removing the cache entry). Marketplaces of every declared
+  # plugin are registered; entries in extra.extraKnownMarketplaces win.
+  plugins = harnixLib.pluginSettings {
+    pluginsCfg       = config.ai.plugins.claude-code;
+    enabledOverrides = cfg.enabledPlugins;
+    inherit registry;
+  };
+  marketplaces = plugins.extraKnownMarketplaces // (cfg.extra.extraKnownMarketplaces or {});
 
   base = {
     "$schema"   = "https://json.schemastore.org/claude-code-settings.json";
     permissions = cfg.permissions;
     hooks       = cfg.hooks;
     inherit (cfg.mcpJsonScope) enableAllProjectMcpServers enabledMcpjsonServers disabledMcpjsonServers;
-  } // lib.optionalAttrs (derivedEnabledPlugins != {}) {
-    enabledPlugins = derivedEnabledPlugins;
+  } // lib.optionalAttrs (plugins.enabledPlugins != {}) {
+    inherit (plugins) enabledPlugins;
   };
 
-  rendered = base // cfg.extra;
+  rendered = base // cfg.extra // lib.optionalAttrs (marketplaces != {}) {
+    extraKnownMarketplaces = marketplaces;
+  };
 
   # Keys of `extra` that silently replace a value harnix models directly.
   shadowedKeys = lib.intersectLists (lib.attrNames base) (lib.attrNames cfg.extra);

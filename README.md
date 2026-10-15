@@ -53,6 +53,20 @@ inputs.harnix.url = "github:tienedev/harnix";
 
 Each tool can be switched off: `ai.pi.enable = false;` or `ai.claudeCode.enable = false;` (both default to `true`).
 
+## Claude Code plugins (`ai.plugins.claude-code`)
+
+Claude Code loads a plugin only when three things line up, and harnix provides all three for every declared plugin:
+
+1. the plugin files and their record in `installed_plugins.json`;
+2. the plugin enabled in `enabledPlugins` (user settings for `user`, `<project>/.claude/settings.local.json` for `project`);
+3. its marketplace registered, through `extraKnownMarketplaces` in user settings (from the registry entry's `marketplaceSource`).
+
+With `ai.claudeCode.settings.enable = true`, 2 and 3 are part of the rendered `settings.json`. Without it, harnix merges just those entries into your existing `~/.claude/settings.json`, keeps everything else, and removes them again when you stop declaring the plugin. If that file is a store symlink owned by another module, harnix leaves it alone and warns. In that case, add the keys to that module.
+
+Claude Code clones a newly registered marketplace on its next start, and the plugin becomes available from the start after that.
+
+For a plugin that is not in the built-in registry, declare it with `ai.plugins.claude-code.registry` (see the option's example) and set `marketplaceSource`, e.g. `{ source = "github"; repo = "owner/repo"; }`.
+
 ## MCP servers (`ai.mcpServers`)
 
 | `type` | Required | Optional |
@@ -122,7 +136,7 @@ ai.claudeCode.settings = {
 };
 ```
 
-`enabledPlugins` is derived from `ai.plugins.claude-code.user`. Project-scope plugins (`ai.plugins.claude-code.project`) are enabled in `<project>/.claude/settings.local.json` instead: harnix merges `enabledPlugins."<id>" = true` into that file and keeps everything else in it; entries it stops declaring, including for a project removed from the configuration, are removed again. When harnix creates that file inside a git repository, it adds it to `.git/info/exclude`, as Claude Code does. Projects whose directory does not exist on the current host are skipped, so one config can list projects of several machines. `mcpJsonScope.enableAllProjectMcpServers` defaults to `false` (CVE-2026-21852 mitigation); use `enabledMcpjsonServers` to allowlist specific server names from project `.mcp.json` files.
+`enabledPlugins` is derived from `ai.plugins.claude-code.user`, and `extraKnownMarketplaces` from the marketplaces of declared plugins (entries in `extra.extraKnownMarketplaces` win). Project-scope plugins (`ai.plugins.claude-code.project`) are enabled in `<project>/.claude/settings.local.json` instead: harnix merges `enabledPlugins."<id>" = true` into that file and keeps everything else in it; entries it stops declaring, including for a project removed from the configuration, are removed again. When harnix creates that file inside a git repository, it adds it to `.git/info/exclude`, as Claude Code does. Projects whose directory does not exist on the current host are skipped, so one config can list projects of several machines. `mcpJsonScope.enableAllProjectMcpServers` defaults to `false` (CVE-2026-21852 mitigation); use `enabledMcpjsonServers` to allowlist specific server names from project `.mcp.json` files.
 
 The default `permissions` block bans reads of `~/.ssh`, `~/.aws`, `~/.gnupg`, `/run/secrets` and edits of `/etc`, `~/.ssh`, `~/.aws`, `~/.gnupg` (`Edit(...)` rules cover every file-writing tool; Claude Code ignores `Write(path)` deny rules), asks for `Bash`/`Write`/`Edit`/`mcp__*`, and allows the read-only tools (`Read`, `Glob`, `Grep`, `WebFetch`, `WebSearch`, `Task`, `Skill`). Override the whole `permissions` attrset if you need a different policy — there is no shallow merge. Setting `permissions`, `hooks`, `enabledPlugins` or the MCP scope keys through `extra` prints a warning, since it silently replaces the dedicated option.
 
@@ -142,6 +156,7 @@ What harnix owns, and how it is installed:
 | `~/.claude/plugins/installed_plugins.json` | records of declared plugins | activation, merge |
 | `~/.claude/plugins/cache/<mp>/<plugin>/<version>` | declared versions | store symlink |
 | `~/.claude/settings.json` (opt-in) | whole file | store symlink, or writable copy with `mutable` |
+| `~/.claude/settings.json` (settings not enabled) | `enabledPlugins` / `extraKnownMarketplaces` entries harnix declares | activation, merge |
 | `<project>/.claude/settings.local.json` | `enabledPlugins` entries harnix declares | activation, merge |
 | `~/.pi/agent/mcp.json` | whole file | activation, writable copy |
 | `~/.claude/agents/`, `~/.pi/agent/agents/`, `~/.agents/skills/` | declared entries | store symlinks |
@@ -158,4 +173,4 @@ All writes are atomic (temp file + rename, mode `600`). A merged file that is no
 
 ## Contributing
 
-Run `nix flake check` before submitting (CI runs it on Linux and macOS). PRs welcome for new registry entries. Each entry needs: `marketplace`, `plugin`, `version`, `src` (fetchFromGitHub with exact `rev` + `hash`), `subpath`, `hasSkills`.
+Run `nix flake check` before submitting (CI runs it on Linux and macOS). PRs welcome for new registry entries. Each entry needs: `marketplace`, `plugin`, `version`, `src` (fetchFromGitHub with exact `rev` + `hash`), `subpath`, `hasSkills`, `marketplaceSource`.
